@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "mocha --recursive ./**/*-tests.js"
+    "test": "mocha --recursive ./**/*-tests.js",
+    "start": "node connect.js"
   },
   "author": "",
   "license": "ISC",

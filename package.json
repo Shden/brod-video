@@ -1,0 +1,20 @@
+{
+  "name": "brod-video",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "mocha --recursive ./**/*-tests.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dgram": "^1.0.1",
+    "xml2js": "^0.4.23",
+    "xmlhttprequest": "^1.8.0"
+  },
+  "devDependencies": {
+    "should": "^13.2.3"
+  }
+}

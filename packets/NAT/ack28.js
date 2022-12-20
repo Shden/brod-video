@@ -31,6 +31,9 @@ export function serializeAck28(ack28)
 
 export function deserializeAck28(buffer)
 {
+        if (buffer.readUInt32LE(0 * 4) != Ack28Cmd)
+                raise('Not Ack28 command, unable to deserialize.');
+
         let ack28 = new Ack28();
         ack28.CmdHead   = buffer.readUInt32LE(0 * 4); 
         ack28.UniqID1   = buffer.readUInt32LE(1 * 4); 

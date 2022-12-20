@@ -33,7 +33,9 @@ export function serializeBye24(bye24)
 
 export function deserializeBye24(buffer)
 {
-        // const packetAsInt32Array = new Int32Array(buffer);
+        if (buffer.readUInt32LE(0 * 4) != Bye24Cmd)
+                raise('Not Bye24 command, unable to deserialize.');
+
         let bye24 = new Bye24();
         bye24.CmdHead   = buffer.readUInt32LE(0 * 4);
         bye24.UniqID1   = buffer.readUInt32LE(1 * 4);

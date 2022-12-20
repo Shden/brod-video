@@ -18,6 +18,7 @@
 */
 
 export const NATReqCmd = 0x00010102;
+export const NATRespCmd = 0x88010102;
 
 // NATReq data structure 
 export function NATReq(id1, id2, id3, id4, id5, data1, data2, xml)
@@ -39,4 +40,24 @@ export function serializeNATReq(NATReq)
         const b32 = Buffer.from(u32.buffer);
         const btxt = new Buffer.from(NATReq.XML + '\0');
         return Buffer.concat([b32, btxt]);
+}
+
+export function deserializeNATReq(buffer)
+{
+        if (buffer.readUInt32LE(0 * 4) != NATReqCmd && buffer.readUInt32LE(0 * 4) != NATRespCmd)
+                raise('Not NATReq command, unable to deserialize.');
+
+        let natReq = new NATReq();
+        natReq.CmdHead  = buffer.readUInt32LE(0 * 4);
+        natReq.UniqID1  = buffer.readUInt32LE(1 * 4);
+        natReq.UniqID2  = buffer.readUInt32LE(2 * 4);
+        natReq.UniqID3  = buffer.readUInt32LE(3 * 4);
+        natReq.UniqID4  = buffer.readUInt32LE(4 * 4);
+        natReq.UniqID5  = buffer.readUInt32LE(5 * 4);
+        natReq.Data1    = buffer.readUInt32LE(6 * 4);
+        natReq.Data2    = buffer.readUInt32LE(7 * 4);
+
+        natReq.XML      = buffer.toString('ascii', 8 * 4, buffer.length-1);
+
+        return natReq;
 }

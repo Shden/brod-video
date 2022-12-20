@@ -26,20 +26,19 @@ export function Ack28(id)
 export function serializeAck28(ack28)
 {
         const u32 = new Uint32Array([ack28.CmdHead, ack28.UniqID1, ack28.Resp1, ack28.Resp2, ack28.UniqID2, ack28.Resp3, ack28.CmdTail]);
-        return u32.buffer;
+        return Buffer.from(u32.buffer);
 }
 
 export function deserializeAck28(buffer)
 {
-        const packetAsInt32Array = new Int32Array(buffer);
         let ack28 = new Ack28();
-        ack28.CmdHead = packetAsInt32Array[0];
-        ack28.UniqID1 = packetAsInt32Array[1];
-        ack28.Resp1 = packetAsInt32Array[2];
-        ack28.Resp2 = packetAsInt32Array[3];
-        ack28.UniqID2 = packetAsInt32Array[4];
-        ack28.Resp3 = packetAsInt32Array[5];
-        ack28.CmdTail = packetAsInt32Array[6];
+        ack28.CmdHead   = buffer.readUInt32LE(0 * 4); 
+        ack28.UniqID1   = buffer.readUInt32LE(1 * 4); 
+        ack28.Resp1     = buffer.readUInt32LE(2 * 4); 
+        ack28.Resp2     = buffer.readUInt32LE(3 * 4); 
+        ack28.UniqID2   = buffer.readUInt32LE(4 * 4);
+        ack28.Resp3     = buffer.readUInt32LE(5 * 4); 
+        ack28.CmdTail   = buffer.readUInt32LE(6 * 4);
 
         return ack28;
 }

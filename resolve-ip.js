@@ -2,6 +2,7 @@ import udp from "dgram";
 import { Ack28, Ack28Cmd, serializeAck28, deserializeAck28 } from './packets/NAT/ack28.js';
 import { NATReq, NATRespCmd, serializeNATReq, deserializeNATReq } from './packets/NAT/natReq.js';
 import { serialNumber } from './privateData.js';
+import xml2js from "xml2js";
 
 const IP_RESOLUTION_TIMEOUT = 2000;
 
@@ -46,7 +47,24 @@ export async function tryObtainPublicIP(host, port, requestID)
 
                                 const natResponce = deserializeNATReq(msg);
 
-                                console.log(natResponce.XML);
+                                // console.log(natResponce.XML);
+
+                                // convert XML to JSON
+                                xml2js.parseString(natResponce.XML, (err, result) => {
+                                        if (err) throw err;
+
+                                        if (result.Nat.Cmd[0].Status == 0)
+                                        {
+                                                // console.log("%j", result);
+                                                console.log('Device IP:', result.Nat.Cmd[0].DevicePeerIp[0]);
+                                                console.log('Device port:', result.Nat.Cmd[0].DevicePeerPort[0]);
+                                        }
+                                        // // console.log('Retrieved NAT hosts:')
+                                        // for (const NATServer of result.NatServerList.Item) {
+                                        //         // console.log(' *', NATServer.Addr[0], ':', NATServer.Port[0]);
+                                        //         tryObtainPublicIP(NATServer.Addr[0], NATServer.Port[0], requestID);
+                                        // }
+                                })
                         }
                 });
 

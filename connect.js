@@ -23,7 +23,7 @@ xhr.onload = function () {
                                 // console.log(' *', NATServer.Addr[0], ':', NATServer.Port[0]);
                                 tryObtainPublicIP(NATServer.Addr[0], NATServer.Port[0], requestID);
                         }
-                })
+                });
 
                 //console.log(xmlDoc);
 

@@ -1,6 +1,7 @@
 import udp from "dgram";
 import { Ack28, Ack28Cmd, serializeAck28, deserializeAck28 } from './packets/NAT/ack28.js';
 import { NATReq, NATRespCmd, serializeNATReq, deserializeNATReq } from './packets/NAT/natReq.js';
+import { Bye24, serializeBye24 } from './packets/NAT/bye24.js';
 import { serialNumber } from './privateData.js';
 import xml2js from "xml2js";
 
@@ -40,7 +41,6 @@ export async function tryObtainPublicIP(host, port, requestID)
                                 // send NAT request. Again, the meaninig of 5 ids and 2 datas is unclear
                                 let NATRequest = new NATReq(requestID, requestID, requestID, requestID+1, requestID+1, 0x0100, 0x60, NATXMLRequest)
                                 client.send(Buffer.from(serializeNATReq(NATRequest)), port, host);
-
                         }
 
                         if (msg.readUint32LE(0) == NATRespCmd) {
@@ -64,12 +64,18 @@ export async function tryObtainPublicIP(host, port, requestID)
                                         //         // console.log(' *', NATServer.Addr[0], ':', NATServer.Port[0]);
                                         //         tryObtainPublicIP(NATServer.Addr[0], NATServer.Port[0], requestID);
                                         // }
-                                })
+                                });
+
+                                // send Bye
+                                let byeRequest = new Bye24(requestID, requestID-1);
+                                client.send(Buffer.from(serializeBye24(byeRequest)), port, host);
+
                         }
                 });
 
-                const ackRequest1 = new Ack28(requestID);
-                client.send(Buffer.from(serializeAck28(ackRequest1)), port, host, function (error) {
+                // Initiate exchange by Ack
+                const ackRequest = new Ack28(requestID);
+                client.send(Buffer.from(serializeAck28(ackRequest)), port, host, function (error) {
                         if (error) {
                                 console.log(error);
                                 client.close();

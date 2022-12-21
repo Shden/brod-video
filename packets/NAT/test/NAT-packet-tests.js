@@ -5,7 +5,7 @@ import * as should from 'should';
 
 const TEST_ID = 0x1F2E3D4C;
 
-describe('ACK28 packet tests:', function() {
+describe('Ack28 packet tests:', function() {
 
         it('Serialization', function() {
 

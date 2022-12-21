@@ -1,6 +1,6 @@
 import { XMLHttpRequest } from "xmlhttprequest";
 import xml2js from "xml2js";
-import { discoveryDVR } from "./discovery.js";
+import { discoveryDVR } from "./discoveryNAT.js";
 import { autoNATURI, autoNATPort } from "./privateData.js";
 
 const requestID = Math.floor(Math.random() * 0xFFFFFFFF);
@@ -21,7 +21,9 @@ xhr.onload = function () {
                         // console.log('Retrieved NAT hosts:')
                         for (const NATServer of result.NatServerList.Item) {
                                 // console.log(' *', NATServer.Addr[0], ':', NATServer.Port[0]);
-                                discoveryDVR(NATServer.Addr[0], NATServer.Port[0], requestID);
+                                discoveryDVR(NATServer.Addr[0], NATServer.Port[0], requestID)
+                                        .then((result) => { console.log(result); })
+                                        .catch((error) => {})
                         }
                 });
 

@@ -61,10 +61,10 @@ export async function discoveryDVR(NATPointHost, NATPointPort, requestID)
                                                 const devicePort = result.Nat.Cmd[0].DevicePeerPort[0];
 
                                                 // console.log("%j", result);
-                                                console.log('Device IP:', deviceIP);
-                                                console.log('Device port:', devicePort);
+                                                // console.log('Device IP:', deviceIP);
+                                                // console.log('Device port:', devicePort);
 
-                                                resolve(deviceIP, devicePort);
+                                                resolve({ IP: deviceIP, port: devicePort});
                                         }
                                         // // console.log('Retrieved NAT hosts:')
                                         // for (const NATServer of result.NatServerList.Item) {
@@ -89,7 +89,7 @@ export async function discoveryDVR(NATPointHost, NATPointPort, requestID)
                         }
                 });
 
-                setTimeout(() => { client.close(); resolve(); }, IP_RESOLUTION_TIMEOUT);
+                setTimeout(() => { client.close(); reject('timeout'); }, IP_RESOLUTION_TIMEOUT);
         });
 }
 

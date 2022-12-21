@@ -16,7 +16,7 @@ const IP_RESOLUTION_TIMEOUT = 2000;
 
 const NATXMLRequest = `<Nat version="0.4.0.1"><Cmd id="10006"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo></Cmd></Nat>`;
 
-export async function tryObtainPublicIP(host, port, requestID)
+export async function discoveryDVR(NATPointHost, NATPointPort, requestID)
 {
         return new Promise((resolve, reject) => {
                 var client = udp.createSocket('udp4');
@@ -36,11 +36,11 @@ export async function tryObtainPublicIP(host, port, requestID)
                                 ackResponse.Resp3 = requestID + 1;
 
                                 // send 2nd ack request
-                                client.send(Buffer.from(serializeAck28(ackResponse)), port, host);
+                                client.send(Buffer.from(serializeAck28(ackResponse)), NATPointPort, NATPointHost);
 
                                 // send NAT request. Again, the meaninig of 5 ids and 2 datas is unclear
                                 let NATRequest = new NATReq(requestID, requestID, requestID, requestID+1, requestID+1, 0x0100, 0x60, NATXMLRequest)
-                                client.send(Buffer.from(serializeNATReq(NATRequest)), port, host);
+                                client.send(Buffer.from(serializeNATReq(NATRequest)), NATPointPort, NATPointHost);
                         }
 
                         if (msg.readUint32LE(0) == NATRespCmd) {
@@ -55,9 +55,14 @@ export async function tryObtainPublicIP(host, port, requestID)
 
                                         if (result.Nat.Cmd[0].Status == 0)
                                         {
+                                                const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
+                                                const devicePort = result.Nat.Cmd[0].DevicePeerPort[0];
+
                                                 // console.log("%j", result);
-                                                console.log('Device IP:', result.Nat.Cmd[0].DevicePeerIp[0]);
-                                                console.log('Device port:', result.Nat.Cmd[0].DevicePeerPort[0]);
+                                                console.log('Device IP:', deviceIP);
+                                                console.log('Device port:', devicePort);
+
+                                                resolve(deviceIP, devicePort);
                                         }
                                         // // console.log('Retrieved NAT hosts:')
                                         // for (const NATServer of result.NatServerList.Item) {
@@ -68,14 +73,14 @@ export async function tryObtainPublicIP(host, port, requestID)
 
                                 // send Bye
                                 let byeRequest = new Bye24(requestID, requestID-1);
-                                client.send(Buffer.from(serializeBye24(byeRequest)), port, host);
+                                client.send(Buffer.from(serializeBye24(byeRequest)), NATPointPort, NATPointHost);
 
                         }
                 });
 
                 // Initiate exchange by Ack
                 const ackRequest = new Ack28(requestID);
-                client.send(Buffer.from(serializeAck28(ackRequest)), port, host, function (error) {
+                client.send(Buffer.from(serializeAck28(ackRequest)), NATPointPort, NATPointHost, function (error) {
                         if (error) {
                                 console.log(error);
                                 client.close();

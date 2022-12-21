@@ -26,6 +26,7 @@ export async function discoveryDVR(NATPointHost, NATPointPort, requestID)
                         // console.log('Received %d bytes from %s:%d', 
                         //         msg.length, info.address, info.port, '\t', msg.toString('hex'));
         
+                        // step 1: got Ack responce from NAT point
                         if (msg.readUint32LE(0) == Ack28Cmd) {
                                 // console.log('Responce 1 received, keep conversation');
                                 const ackResponse = deserializeAck28(msg);
@@ -43,6 +44,7 @@ export async function discoveryDVR(NATPointHost, NATPointPort, requestID)
                                 client.send(Buffer.from(serializeNATReq(NATRequest)), NATPointPort, NATPointHost);
                         }
 
+                        // step 2: got NAT responce
                         if (msg.readUint32LE(0) == NATRespCmd) {
 
                                 const natResponce = deserializeNATReq(msg);
@@ -71,14 +73,14 @@ export async function discoveryDVR(NATPointHost, NATPointPort, requestID)
                                         // }
                                 });
 
-                                // send Bye
+                                // wrap up - send Bye command
                                 let byeRequest = new Bye24(requestID, requestID-1);
                                 client.send(Buffer.from(serializeBye24(byeRequest)), NATPointPort, NATPointHost);
 
                         }
                 });
 
-                // Initiate exchange by Ack
+                // Initiate exchange with NAT point by Ack
                 const ackRequest = new Ack28(requestID);
                 client.send(Buffer.from(serializeAck28(ackRequest)), NATPointPort, NATPointHost, function (error) {
                         if (error) {

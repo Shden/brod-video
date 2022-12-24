@@ -19,16 +19,14 @@ xhr.onload = function () {
                 xml2js.parseString(xhr.responseText, (err, result) => {
                         if (err) throw err
 
-                        // console.log('Retrieved NAT hosts:')
-                        for (const NATServer of result.NatServerList.Item) {
-                                // console.log(' *', NATServer.Addr[0], ':', NATServer.Port[0]);
-                                NATDiscovery2(NATServer.Addr[0], NATServer.Port[0])
-                                        .then((result) => { console.log(result); })
-                                        .catch((error) => {})
-                        }
-                });
+                        // map addresses and ports to a vector of promises
+                        const x = result.NatServerList.Item.map((NATPoint) => {
+                                return NATDiscovery2(NATPoint.Addr[0], NATPoint.Port[0])
+                        });
 
-                //console.log(xmlDoc);
+                        // first NAT point responce wins
+                        Promise.race(x).then((res) => console.log(res) )
+                });
 
         } else {
 

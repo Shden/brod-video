@@ -98,7 +98,8 @@ function NAT10006Request(socket, host, port, conversationID)
 
 function NAT10002Request(socket, host, port, conversationID)
 {
-        const NAT10002XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10002"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo><RequestPeerNat>0</RequestPeerNat><P2PVersion>1.0</P2PVersion><ConnectionId>${conversationID}</ConnectionId></Cmd></Nat>`
+        const connectionID = conversationID + 0x101;
+        const NAT10002XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10002"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo><RequestPeerNat>0</RequestPeerNat><P2PVersion>1.0</P2PVersion><ConnectionId>${connectionID}</ConnectionId></Cmd></Nat>`
 
         return new Promise((resolve, reject) => {
 
@@ -109,26 +110,28 @@ function NAT10002Request(socket, host, port, conversationID)
 
                                 const natResponce = deserializeNATReq(msg);
 
-                                console.log(natResponce.XML);
+                                // console.log(natResponce.XML);
 
-                                // convert XML to JSON
-                                xml2js.parseString(natResponce.XML, (err, result) => {
-                                        if (err) throw err;
+                                resolve(connectionID);
 
-                                        // console.log("%j", result);
+                                // // convert XML to JSON
+                                // xml2js.parseString(natResponce.XML, (err, result) => {
+                                //         if (err) throw err;
 
-                                        // if (result.Nat.Cmd[0].Status == 0)
-                                        // {
-                                        //         const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
-                                        //         const devicePort = result.Nat.Cmd[0].DevicePeerPort[0];
+                                //         // console.log("%j", result);
 
-                                        //         // console.log('Device IP:', deviceIP);
-                                        //         // console.log('Device port:', devicePort);
+                                //         // if (result.Nat.Cmd[0].Status == 0)
+                                //         // {
+                                //         //         const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
+                                //         //         const devicePort = result.Nat.Cmd[0].DevicePeerPort[0];
 
-                                        //         resolve({ host: deviceIP, port: devicePort});
-                                        // }
-                                        resolve();
-                                });
+                                //         //         // console.log('Device IP:', deviceIP);
+                                //         //         // console.log('Device port:', devicePort);
+
+                                //         //         resolve({ host: deviceIP, port: devicePort});
+                                //         // }
+                                //         resolve(connectionID);
+                                // });
                         }
                 });
 
@@ -153,28 +156,33 @@ function ByeNow(socket, host, port, conversationID)
         });
 }
 
-function runNATDiscovery(host, port)
+export function NATDiscovery2(host, port)
 {
         const socket = udp.createSocket('udp4');
         const NAT10006ConversationID = Math.floor(Math.random() * 0xFFFFFFFF);
         const NAT10002ConversationID = NAT10006ConversationID + 0x101;
 
+        var discoveryResult;
+
         return new Promise((resolve, reject) => {
                 StartConversation(socket, host, port, NAT10006ConversationID)
                 .then(() => NAT10006Request(socket, host, port, NAT10006ConversationID))
-                .then((res) => console.log(res))
+                .then((res) => { discoveryResult = res; } )
                 .then(() => ByeNow(socket, host, port, NAT10006ConversationID))
 
                 .then(() => StartConversation(socket, host, port, NAT10002ConversationID))
                 .then(() => NAT10002Request(socket, host, port, NAT10002ConversationID))
+                .then((res) => { discoveryResult.connectionID = res; } )
                 .then(() => ByeNow(socket, host, port, NAT10002ConversationID))
+
+                .then(() => resolve(discoveryResult))
 
                 .catch((reaason) => { /*console.log("Exception:", reaason)*/})
                 .finally(() => { socket.close()});
         });
 }
 
-export async function NATDiscovery2(host, port)
-{
-        return await runNATDiscovery(host, port);
-}
+// export async function NATDiscovery2(host, port)
+// {
+//         return await runNATDiscovery(host, port);
+// }

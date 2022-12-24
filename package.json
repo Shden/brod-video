@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "mocha --recursive ./**/*-tests.js",
-    "start": "node getDVRIP.js"
+    "start": "node start.js"
   },
   "author": "",
   "license": "ISC",

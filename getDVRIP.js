@@ -1,9 +1,10 @@
 import { XMLHttpRequest } from "xmlhttprequest";
 import xml2js from "xml2js";
-import { discoveryDVR } from "./discoveryNAT.js";
+//import { NATDiscovery } from "./discoveryNAT.js";
+import { NATDiscovery2 } from "./discoveryNAT-2.js";
 import { autoNATURI, autoNATPort } from "./privateData.js";
 
-const requestID = Math.floor(Math.random() * 0xFFFFFFFF);
+// const conversationID = Math.floor(Math.random() * 0xFFFFFFFF);
 
 let xhr = new XMLHttpRequest();
 xhr.open('GET', `http://c2.autonat.com:${autoNATPort}${autoNATURI}`);
@@ -21,7 +22,7 @@ xhr.onload = function () {
                         // console.log('Retrieved NAT hosts:')
                         for (const NATServer of result.NatServerList.Item) {
                                 // console.log(' *', NATServer.Addr[0], ':', NATServer.Port[0]);
-                                discoveryDVR(NATServer.Addr[0], NATServer.Port[0], requestID)
+                                NATDiscovery2(NATServer.Addr[0], NATServer.Port[0])
                                         .then((result) => { console.log(result); })
                                         .catch((error) => {})
                         }

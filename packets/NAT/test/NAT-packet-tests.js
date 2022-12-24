@@ -1,5 +1,5 @@
 import { Ack28, Ack28Cmd, Ack28Tail, serializeAck28, deserializeAck28 } from '../ack28.js';
-import { Bye24, Bye24Cmd, serializeBye24, deserializeBye24 } from '../bye24.js';
+import { Cmd24, Cmd24_020201, serializeCmd24, deserializeCmd24 } from '../cmd24.js';
 import { NATReq, NATReqCmd, serializeNATReq, deserializeNATReq } from '../natReq.js';
 import * as should from 'should';
 
@@ -32,26 +32,26 @@ describe('Ack28 packet tests:', function() {
 
 });
 
-describe('BYE24 packet tests:', () => {
+describe('Cmd24 packet tests:', () => {
 
         it('Serialization', () => {
 
-                const packet = new Bye24(TEST_ID, TEST_ID+1);
-                const buffer = serializeBye24(packet);
+                const packet = new Cmd24(Cmd24_020201, TEST_ID, TEST_ID+1);
+                const buffer = serializeCmd24(packet);
 
-                buffer.readUInt32LE(0 * 4).should.be.equal(Bye24Cmd);  
+                buffer.readUInt32LE(0 * 4).should.be.equal(Cmd24_020201);  
                 buffer.readUInt32LE(1 * 4).should.be.equal(TEST_ID);
                 buffer.readUInt32LE(3 * 4).should.be.equal(TEST_ID+1);
         });
 
         it('Deserialization', () => {
 
-                const bye24ToSerialize = new Bye24(TEST_ID, TEST_ID+1);
-                const deserializedBye24 = deserializeBye24(serializeBye24(bye24ToSerialize));
+                const cmd24ToSerialize = new Cmd24(Cmd24_020201, TEST_ID, TEST_ID+1);
+                const deserializedCmd24 = deserializeCmd24(serializeCmd24(cmd24ToSerialize));
 
-                deserializedBye24.CmdHead.should.be.equal(bye24ToSerialize.CmdHead);
-                deserializedBye24.UniqID1.should.be.equal(bye24ToSerialize.UniqID1);
-                deserializedBye24.UniqID2.should.be.equal(bye24ToSerialize.UniqID2);
+                deserializedCmd24.CmdHead.should.be.equal(cmd24ToSerialize.CmdHead);
+                deserializedCmd24.UniqID1.should.be.equal(cmd24ToSerialize.UniqID1);
+                deserializedCmd24.UniqID2.should.be.equal(cmd24ToSerialize.UniqID2);
         });
 });
 

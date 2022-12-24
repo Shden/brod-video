@@ -13,36 +13,38 @@
 <<<<<<
 */
 
-export const Bye24Cmd = 0x00010302;
+export const Cmd24_020201 = 0x00010202;
+export const Cmd24_020301 = 0x00010302;
 
 // Bye24 data structure 
-export function Bye24(id1, id2)
+export function Cmd24(cmd24Head, id1, id2)
 {
-        this.CmdHead = Bye24Cmd;
+        this.CmdHead = cmd24Head;
         this.UniqID1 = id1;
         this.UniqID2 = id2;
         this.Data1 = 0;
         this.Data2 = 0;
 }
 
-export function serializeBye24(bye24)
+export function serializeCmd24(cmd24)
 {
-        const u32 = new Uint32Array([bye24.CmdHead, bye24.UniqID1, bye24.UniqID1, bye24.UniqID2, bye24.Data1, bye24.Data2]);
+        const u32 = new Uint32Array([cmd24.CmdHead, cmd24.UniqID1, cmd24.UniqID1, cmd24.UniqID2, cmd24.Data1, cmd24.Data2]);
         return Buffer.from(u32.buffer);
 }
 
-export function deserializeBye24(buffer)
+export function deserializeCmd24(buffer)
 {
-        if (buffer.readUInt32LE(0 * 4) != Bye24Cmd)
-                raise('Not Bye24 command, unable to deserialize.');
+        const cmd24Head = buffer.readUInt32LE(0 * 4);
+        if (cmd24Head != Cmd24_020201 && cmd24Head != Cmd24_020301)
+                raise('Not Cmd24 command, unable to deserialize.');
 
-        let bye24 = new Bye24();
-        bye24.CmdHead   = buffer.readUInt32LE(0 * 4);
-        bye24.UniqID1   = buffer.readUInt32LE(1 * 4);
-        bye24.UniqID2   = buffer.readUInt32LE(3 * 4);
-        bye24.Data1     = buffer.readUInt32LE(4 * 4);
-        bye24.Data2     = buffer.readUInt32LE(5 * 4);
+        let cmd24 = new Cmd24();
+        cmd24.CmdHead   = cmd24Head;
+        cmd24.UniqID1   = buffer.readUInt32LE(1 * 4);
+        cmd24.UniqID2   = buffer.readUInt32LE(3 * 4);
+        cmd24.Data1     = buffer.readUInt32LE(4 * 4);
+        cmd24.Data2     = buffer.readUInt32LE(5 * 4);
 
-        return bye24;
+        return cmd24;
 }
 

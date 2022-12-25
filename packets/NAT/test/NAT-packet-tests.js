@@ -1,27 +1,27 @@
-import { Ack28, Ack28Cmd, Ack28Tail, serializeAck28, deserializeAck28 } from '../ack28.js';
+import { Cmd28, Cmd28Head_10002, Cmd28Tail, serializeCmd28, deserializeCmd28 } from '../cmd28.js';
 import { Cmd24, Cmd24_020201, serializeCmd24, deserializeCmd24 } from '../cmd24.js';
 import { NATReq, NATReqCmd, serializeNATReq, deserializeNATReq } from '../natReq.js';
 import * as should from 'should';
 
 const TEST_ID = 0x1F2E3D4C;
 
-describe('Ack28 packet tests:', function() {
+describe('Cmd28 packet tests:', function() {
 
         it('Serialization', function() {
 
-                const packet = new Ack28(TEST_ID);
-                const buffer = serializeAck28(packet);
+                const packet = new Cmd28(Cmd28Head_10002, TEST_ID);
+                const buffer = serializeCmd28(packet);
 
-                buffer.readUInt32LE(0 * 4).should.be.equal(Ack28Cmd);
+                buffer.readUInt32LE(0 * 4).should.be.equal(Cmd28Head_10002);
                 buffer.readUInt32LE(1 * 4).should.be.equal(TEST_ID);
                 buffer.readUInt32LE(4 * 4).should.be.equal(TEST_ID);
-                buffer.readUInt32LE(6 * 4).should.be.equal(Ack28Tail);
+                buffer.readUInt32LE(6 * 4).should.be.equal(Cmd28Tail);
         });
 
         it('Deserialization', function() {
 
-                const packetToSerialize = new Ack28(TEST_ID);
-                const deserializedPacket = deserializeAck28(serializeAck28(packetToSerialize));
+                const packetToSerialize = new Cmd28(Cmd28Head_10002, TEST_ID);
+                const deserializedPacket = deserializeCmd28(serializeCmd28(packetToSerialize));
 
                 deserializedPacket.CmdHead.should.be.equal(packetToSerialize.CmdHead);
                 deserializedPacket.UniqID1.should.be.equal(packetToSerialize.UniqID1);

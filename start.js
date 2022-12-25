@@ -1,10 +1,7 @@
 import { XMLHttpRequest } from "xmlhttprequest";
 import xml2js from "xml2js";
-//import { NATDiscovery } from "./discoveryNAT.js";
-import { NATDiscovery2 } from "./discoveryNAT-2.js";
+import { NATDiscover, DVRConnect } from "./networking.js";
 import { autoNATURI, autoNATPort } from "./privateData.js";
-
-// const conversationID = Math.floor(Math.random() * 0xFFFFFFFF);
 
 let xhr = new XMLHttpRequest();
 xhr.open('GET', `http://c2.autonat.com:${autoNATPort}${autoNATURI}`);
@@ -20,12 +17,15 @@ xhr.onload = function () {
                         if (err) throw err
 
                         // map addresses and ports to a vector of promises
-                        const x = result.NatServerList.Item.map((NATPoint) => {
-                                return NATDiscovery2(NATPoint.Addr[0], NATPoint.Port[0])
+                        const NATPointsDiscovery = result.NatServerList.Item.map((NATPoint) => {
+                                return NATDiscover(NATPoint.Addr[0], parseInt(NATPoint.Port[0]))
                         });
 
                         // first NAT point responce wins
-                        Promise.race(x).then((res) => console.log(res) )
+                        Promise.race(NATPointsDiscovery).then((res) => {
+                                console.log(res);
+                                DVRConnect(res.NAT.host, res.NAT.port, res.DVR.host, res.DVR.port);
+                         });
                 });
 
         } else {

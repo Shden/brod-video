@@ -1,18 +1,21 @@
-/* First command in DVR exchange, goes as 28-byte UDP packet:
+/* Initial exchange, goes as 3 28-byte UDP packets:
 
                                                                                         CmdHead  UniqID1  Resp1    Resp2    UniqID2  Resp3    CmdTail                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------
-18	30.249689	192.168.2.11	185.211.159.123	UDP	57911 → 17534 Len=28	01000100 8416ae35 8316ae35 00000000 8416ae35 8416ae35 fefe0001
-19	30.250600	185.211.159.123	192.168.2.11	UDP	17534 → 57911 Len=28	01000100 8416ae35 8316ae35 8316ae35 8416ae35 8516ae35 fefe0001
+352     5.167631	192.168.2.6	152.32.245.172	UDP	34952 → 8989 Len=28	02000100 6dd38221 00000000 00000000 6dd38221 00000000 fefe0001
+472     5.174198	152.32.245.172	192.168.2.6	UDP	8989 → 34952 Len=28	02000100 6dd38221 6cd38221 00000000 6dd38221 6dd38221 fefe0001
+476	5.174339	192.168.2.6	152.32.245.172	UDP	34952 → 8989 Len=28	02000100 6dd38221 6cd38221 6cd38221 6dd38221 6ed38221 fefe0001
+
 */
 
-export const Cmd28Head = 0x00010001;
+export const Cmd28Head_10002 = 0x00010002;
+export const Cmd28Head_10001 = 0x00010001;
 export const Cmd28Tail = 0x0100fefe;
 
-// Cmd28 data structure 
-export function Cmd28(id)
+// Ack28 data structure 
+export function Cmd28(cmd28Head, id)
 {
-        this.CmdHead = Cmd28Head;
+        this.CmdHead = cmd28Head;
         this.UniqID1 = id;
         this.UniqID2 = id;
         this.Resp1 = 0;
@@ -21,16 +24,16 @@ export function Cmd28(id)
         this.CmdTail = Cmd28Tail;
 }
 
-export function serializeCmd28(ack28)
+export function serializeCmd28(cmd28)
 {
-        const u32 = new Uint32Array([ack28.CmdHead, ack28.UniqID1, ack28.Resp1, ack28.Resp2, ack28.UniqID2, ack28.Resp3, ack28.CmdTail]);
+        const u32 = new Uint32Array([cmd28.CmdHead, cmd28.UniqID1, cmd28.Resp1, cmd28.Resp2, cmd28.UniqID2, cmd28.Resp3, cmd28.CmdTail]);
         return Buffer.from(u32.buffer);
 }
 
 export function deserializeCmd28(buffer)
 {
-        if (buffer.readUInt32LE(0 * 4) != Cmd28Head)
-                raise('Not Ack28 command, unable to deserialize.');
+        if (buffer.readUInt32LE(0 * 4) != Cmd28Head_10002)
+                raise('Not Cmd28 command, unable to deserialize.');
 
         let cmd28 = new Cmd28();
         cmd28.CmdHead   = buffer.readUInt32LE(0 * 4); 

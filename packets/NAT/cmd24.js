@@ -13,33 +13,39 @@
 <<<<<<
 */
 
-export const Cmd24_020201 = 0x00010202;
-export const Cmd24_020301 = 0x00010302;
-
 // Bye24 data structure 
-export function Cmd24(cmd24Head, id1, id2)
+export class Cmd24
 {
-        this.CmdHead = cmd24Head;
-        this.UniqID1 = id1;
-        this.UniqID2 = id2;
-        this.Data1 = 0;
-        this.Data2 = 0;
-}
+        constructor(cmd24Head, id1, id2)
+        {
+                this.CmdHead = cmd24Head;
+                this.UniqID1 = id1;
+                this.UniqID2 = id2;
+                this.Data1 = 0;
+                this.Data2 = 0;
+        }
 
-export function serializeCmd24(cmd24)
-{
-        const u32 = new Uint32Array([cmd24.CmdHead, cmd24.UniqID1, cmd24.UniqID1, cmd24.UniqID2, cmd24.Data1, cmd24.Data2]);
-        return Buffer.from(u32.buffer);
+        static get Head_020201() { return 0x00010202; }
+        static get Head_020301() { return 0x00010302; }
+        
+        serialize(cmd24)
+        {
+                const u32 = new Uint32Array([this.CmdHead, this.UniqID1, this.UniqID1, this.UniqID2, this.Data1, this.Data2]);
+                return Buffer.from(u32.buffer);
+        }
 }
 
 export function deserializeCmd24(buffer)
 {
-        const cmd24Head = buffer.readUInt32LE(0 * 4);
-        if (cmd24Head != Cmd24_020201 && cmd24Head != Cmd24_020301)
+        if (buffer.length !== 24)
+                throw 'Wrong buffer length, unable to deserialize Cmd24.';
+
+        const head = buffer.readUInt32LE(0 * 4);
+        if (head != Cmd24.Head_020201 && head != Cmd24.Head_020301)
                 raise('Not Cmd24 command, unable to deserialize.');
 
         let cmd24 = new Cmd24();
-        cmd24.CmdHead   = cmd24Head;
+        cmd24.CmdHead   = head;
         cmd24.UniqID1   = buffer.readUInt32LE(1 * 4);
         cmd24.UniqID2   = buffer.readUInt32LE(3 * 4);
         cmd24.Data1     = buffer.readUInt32LE(4 * 4);

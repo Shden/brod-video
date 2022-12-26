@@ -2,7 +2,7 @@
 import udp from "dgram";
 import { Cmd28, Cmd28Head_10002, Cmd28Head_10001, deserializeCmd28 } from './packets/NAT/cmd28.js';
 import { NATReq, NATRespCmd, serializeNATReq, deserializeNATReq } from './packets/NAT/natReq.js';
-import { Cmd24, Cmd24_020301, Cmd24_020201, serializeCmd24 } from './packets/NAT/cmd24.js';
+import { Cmd24 } from './packets/NAT/cmd24.js';
 import { serialNumber } from './privateData.js';
 import xml2js from "xml2js";
 import { resolve } from "path";
@@ -130,7 +130,7 @@ function byeNow(socket, host, port, conversationID, byeCommand)
 {
         return new Promise((resolve, reject) => {
                 const byeRequest = new Cmd24(byeCommand, conversationID, conversationID-1);
-                socket.send(Buffer.from(serializeCmd24(byeRequest)), port, host);
+                socket.send(Buffer.from(byeRequest.serialize()), port, host);
                 resolve();
 
                 setTimeout(() => reject('ByeNow connection timeout'), NAT_TIMEOUT);
@@ -196,7 +196,7 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
         const DVRSocket = udp.createSocket('udp4');
 
         const cmd28_1 = new Cmd28(Cmd28Head_10001, DVRConversationID);
-        
+
         const cmd28_2 = new Cmd28(Cmd28Head_10001, DVRConversationID);
         cmd28_2.Data1 = DVRConversationID - 1;
         cmd28_2.Data3 = DVRConversationID;
@@ -209,7 +209,7 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
                 /// should be another socket that will stay open to continue DVR conversation
                 startNATConversation(DVRSocket, NATHost, NATPort, DVRConversationID)
                 .then(() => NAT10002Request(DVRSocket, NATHost, NATPort, DVRConversationID))
-                .then(() => byeNow(DVRSocket, NATHost, NATPort, DVRConversationID, Cmd24_020301))
+                .then(() => byeNow(DVRSocket, NATHost, NATPort, DVRConversationID, Cmd24.Head_020301))
                  
                 .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_1, (msg) => cmd28(msg)))
                 .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_2, (msg) => cmd28(msg)))

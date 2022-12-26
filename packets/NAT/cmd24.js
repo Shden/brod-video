@@ -16,13 +16,14 @@
 // Bye24 data structure 
 export class Cmd24
 {
-        constructor(cmd24Head, id1, id2)
+        constructor(cmd24Head, conversationID, data1, data2 = 0, data3 = 0, data4 = 0)
         {
                 this.CmdHead = cmd24Head;
-                this.UniqID1 = id1;
-                this.UniqID2 = id2;
-                this.Data1 = 0;
-                this.Data2 = 0;
+                this.ConversationID = conversationID;
+                this.Data1 = data1;
+                this.Data2 = data2;
+                this.Data3 = data3;
+                this.Data4 = data4;
         }
 
         static get Head_020201() { return 0x00010202; }
@@ -30,7 +31,7 @@ export class Cmd24
         
         serialize(cmd24)
         {
-                const u32 = new Uint32Array([this.CmdHead, this.UniqID1, this.UniqID1, this.UniqID2, this.Data1, this.Data2]);
+                const u32 = new Uint32Array([this.CmdHead, this.ConversationID, this.Data1, this.Data2, this.Data3, this.Data4]);
                 return Buffer.from(u32.buffer);
         }
 }
@@ -45,11 +46,12 @@ export function deserializeCmd24(buffer)
                 raise('Not Cmd24 command, unable to deserialize.');
 
         let cmd24 = new Cmd24();
-        cmd24.CmdHead   = head;
-        cmd24.UniqID1   = buffer.readUInt32LE(1 * 4);
-        cmd24.UniqID2   = buffer.readUInt32LE(3 * 4);
-        cmd24.Data1     = buffer.readUInt32LE(4 * 4);
-        cmd24.Data2     = buffer.readUInt32LE(5 * 4);
+        cmd24.CmdHead           = head;
+        cmd24.ConversationID    = buffer.readUInt32LE(1 * 4);
+        cmd24.Data1             = buffer.readUInt32LE(2 * 4);
+        cmd24.Data2             = buffer.readUInt32LE(3 * 4);
+        cmd24.Data3             = buffer.readUInt32LE(4 * 4);
+        cmd24.Data4             = buffer.readUInt32LE(5 * 4);
 
         return cmd24;
 }

@@ -1,4 +1,4 @@
-import { Cmd28, Cmd28Head_10002, Cmd28Tail, serializeCmd28, deserializeCmd28 } from '../cmd28.js';
+import { Cmd28, deserializeCmd28, Cmd28Head_10002, Cmd28Tail } from '../cmd28.js';
 import { Cmd24, Cmd24_020201, serializeCmd24, deserializeCmd24 } from '../cmd24.js';
 import { NATReq, NATReqCmd, serializeNATReq, deserializeNATReq } from '../natReq.js';
 import * as should from 'should';
@@ -10,7 +10,7 @@ describe('Cmd28 packet tests:', function() {
         it('Serialization', function() {
 
                 const packet = new Cmd28(Cmd28Head_10002, TEST_ID);
-                const buffer = serializeCmd28(packet);
+                const buffer = packet.serialize();
 
                 buffer.readUInt32LE(0 * 4).should.be.equal(Cmd28Head_10002);
                 buffer.readUInt32LE(1 * 4).should.be.equal(TEST_ID);
@@ -21,11 +21,11 @@ describe('Cmd28 packet tests:', function() {
         it('Deserialization', function() {
 
                 const packetToSerialize = new Cmd28(Cmd28Head_10002, TEST_ID);
-                const deserializedPacket = deserializeCmd28(serializeCmd28(packetToSerialize));
+                const deserializedPacket = deserializeCmd28(packetToSerialize.serialize());
 
                 deserializedPacket.CmdHead.should.be.equal(packetToSerialize.CmdHead);
-                deserializedPacket.UniqID1.should.be.equal(packetToSerialize.UniqID1);
-                deserializedPacket.UniqID2.should.be.equal(packetToSerialize.UniqID2);
+                deserializedPacket.ConversationID.should.be.equal(packetToSerialize.ConversationID);
+                deserializedPacket.ConversationID2.should.be.equal(packetToSerialize.ConversationID2);
                 deserializedPacket.CmdTail.should.be.equal(packetToSerialize.CmdTail);
 
         });

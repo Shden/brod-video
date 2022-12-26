@@ -12,37 +12,49 @@ export const Cmd28Head_10002 = 0x00010002;
 export const Cmd28Head_10001 = 0x00010001;
 export const Cmd28Tail = 0x0100fefe;
 
-// Ack28 data structure 
-export function Cmd28(cmd28Head, id)
+// Cmd28 data structure 
+export class Cmd28
 {
-        this.CmdHead = cmd28Head;
-        this.UniqID1 = id;
-        this.UniqID2 = id;
-        this.Resp1 = 0;
-        this.Resp2 = 0;
-        this.Resp3 = 0;
-        this.CmdTail = Cmd28Tail;
-}
+        constructor(cmd28Head, id)
+        {
+                this.CmdHead = cmd28Head;
+                this.ConversationID = id;
+                this.ConversationID2 = id;
+                this.Data1 = 0;
+                this.Data2 = 0;
+                this.Data3 = 0;
+                this.CmdTail = Cmd28Tail;
+        }
 
-export function serializeCmd28(cmd28)
-{
-        const u32 = new Uint32Array([cmd28.CmdHead, cmd28.UniqID1, cmd28.Resp1, cmd28.Resp2, cmd28.UniqID2, cmd28.Resp3, cmd28.CmdTail]);
-        return Buffer.from(u32.buffer);
+        serialize()
+        {
+                const u32 = new Uint32Array([this.CmdHead, this.ConversationID, this.Data1, this.Data2, this.ConversationID2, this.Data3, this.CmdTail]);
+                return Buffer.from(u32.buffer);
+        }
 }
 
 export function deserializeCmd28(buffer)
 {
-        if (buffer.readUInt32LE(0 * 4) != Cmd28Head_10002)
-                raise('Not Cmd28 command, unable to deserialize.');
+        if (buffer.length !== 28)
+                throw 'Wrong buffer length, unable to deserialize Cmd28.';
+                
+        const head = buffer.readUInt32LE(0 * 4);
+        if (!head in [Cmd28Head_10002, Cmd28Head_10001])
+                throw 'Unknown header, unable to deserialize Cmd28.';
+
+        const tail = buffer.readUInt32LE(6 * 4);
+        if (tail !== Cmd28Tail)
+                throw 'Unknownn tail, unable to deserialize Cmd28.';
 
         let cmd28 = new Cmd28();
-        cmd28.CmdHead   = buffer.readUInt32LE(0 * 4); 
-        cmd28.UniqID1   = buffer.readUInt32LE(1 * 4); 
-        cmd28.Resp1     = buffer.readUInt32LE(2 * 4); 
-        cmd28.Resp2     = buffer.readUInt32LE(3 * 4); 
-        cmd28.UniqID2   = buffer.readUInt32LE(4 * 4);
-        cmd28.Resp3     = buffer.readUInt32LE(5 * 4); 
-        cmd28.CmdTail   = buffer.readUInt32LE(6 * 4);
+
+        cmd28.CmdHead   = head; 
+        cmd28.ConversationID   = buffer.readUInt32LE(1 * 4); 
+        cmd28.Data1     = buffer.readUInt32LE(2 * 4); 
+        cmd28.Data2     = buffer.readUInt32LE(3 * 4); 
+        cmd28.ConversationID2   = buffer.readUInt32LE(4 * 4);
+        cmd28.Data3     = buffer.readUInt32LE(5 * 4); 
+        cmd28.CmdTail   = tail;
 
         return cmd28;
 }

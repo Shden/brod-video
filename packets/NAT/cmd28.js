@@ -8,10 +8,6 @@
 
 */
 
-export const Cmd28Head_10002 = 0x00010002;
-export const Cmd28Head_10001 = 0x00010001;
-export const Cmd28Tail = 0x0100fefe;
-
 // Cmd28 data structure 
 export class Cmd28
 {
@@ -23,8 +19,12 @@ export class Cmd28
                 this.Data1 = 0;
                 this.Data2 = 0;
                 this.Data3 = 0;
-                this.CmdTail = Cmd28Tail;
+                this.CmdTail = Cmd28.Tail;
         }
+
+        static get Head_10002() { return 0x00010002; }
+        static get Head_10001() { return 0x00010001; }
+        static get Tail() { return 0x0100fefe; }
 
         serialize()
         {
@@ -39,11 +39,11 @@ export function deserializeCmd28(buffer)
                 throw 'Wrong buffer length, unable to deserialize Cmd28.';
                 
         const head = buffer.readUInt32LE(0 * 4);
-        if (!head in [Cmd28Head_10002, Cmd28Head_10001])
+        if (!head in [Cmd28.Head_10002, Cmd28.Head_10001])
                 throw 'Unknown header, unable to deserialize Cmd28.';
 
         const tail = buffer.readUInt32LE(6 * 4);
-        if (tail !== Cmd28Tail)
+        if (tail !== Cmd28.Tail)
                 throw 'Unknownn tail, unable to deserialize Cmd28.';
 
         let cmd28 = new Cmd28();

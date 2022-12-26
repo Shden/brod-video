@@ -1,6 +1,6 @@
 // NAT point conversation snapshot analysis: see doc/conversations/NAT conversation 24122022.xlsx
 import udp from "dgram";
-import { Cmd28, Cmd28Head_10002, Cmd28Head_10001, deserializeCmd28 } from './packets/NAT/cmd28.js';
+import { Cmd28, deserializeCmd28 } from './packets/NAT/cmd28.js';
 import { NATReq, NATRespCmd, serializeNATReq, deserializeNATReq } from './packets/NAT/natReq.js';
 import { Cmd24 } from './packets/NAT/cmd24.js';
 import { serialNumber } from './privateData.js';
@@ -17,7 +17,7 @@ function startNATConversation(socket, host, port, conversationID)
 {
         return new Promise((resolve, reject) => {
 
-                const ackRequest = new Cmd28(Cmd28Head_10002, conversationID);
+                const ackRequest = new Cmd28(Cmd28.Head_10002, conversationID);
                 
                 socket.on('message', function (msg, info) {
 
@@ -25,7 +25,7 @@ function startNATConversation(socket, host, port, conversationID)
                         //         msg.length, info.address, info.port, '\t', msg.toString('hex'));
 
                         // got Ack responce from NAT point
-                        if (msg.readUint32LE(0) == Cmd28Head_10002) {
+                        if (msg.readUint32LE(0) == Cmd28.Head_10002) {
                                 // console.log('Responce 1 received, keep conversation');
                                 let ackResponse = new deserializeCmd28(msg);
                                 // console.log('Received ACK responce from %s:%d\t%j', info.address, info.port, ackResponse);
@@ -195,13 +195,13 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
 
         const DVRSocket = udp.createSocket('udp4');
 
-        const cmd28_1 = new Cmd28(Cmd28Head_10001, DVRConversationID);
+        const cmd28_1 = new Cmd28(Cmd28.Head_10001, DVRConversationID);
 
-        const cmd28_2 = new Cmd28(Cmd28Head_10001, DVRConversationID);
+        const cmd28_2 = new Cmd28(Cmd28.Head_10001, DVRConversationID);
         cmd28_2.Data1 = DVRConversationID - 1;
         cmd28_2.Data3 = DVRConversationID;
 
-        const cmd28_3 = new Cmd28(Cmd28Head_10001, DVRConversationID);
+        const cmd28_3 = new Cmd28(Cmd28.Head_10001, DVRConversationID);
         cmd28_3.Data1 = cmd28_3.Data2 = DVRConversationID - 1;
         cmd28_3.Data3 = DVRConversationID + 1;
 
@@ -221,7 +221,7 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
 }
 
 const headIs = (msg, x) => msg.readUint32LE(0) == x;
-const cmd28 = (msg) => headIs(msg, Cmd28Head_10001) || headIs(msg, Cmd28Head_10002);
+const cmd28 = (msg) => headIs(msg, Cmd28.Head_10001) || headIs(msg, Cmd28Head_10002);
 
 /**
  * Send command, await for the responce, validate responce. Repeat several times 

@@ -1,9 +1,9 @@
 // NAT point conversation snapshot analysis: see doc/conversations/NAT conversation 24122022.xlsx
 import udp from "dgram";
-import { Cmd28, deserializeCmd28 } from './packets/NAT/cmd28.js';
+import { Cmd28, deserializeCmd28 } from './packets/cmd28.js';
 import { NATReq, NATRespCmd, serializeNATReq, deserializeNATReq } from './packets/NAT/natReq.js';
-import { Cmd24 } from './packets/NAT/cmd24.js';
-import { Cmd88 } from "./packets/NAT/cmd88.js";
+import { Cmd24 } from './packets/cmd24.js';
+import { Cmd88, DVRAuth } from "./packets/binPayload.js";
 import { serialNumber } from './privateData.js';
 import xml2js from "xml2js";
 import { resolve } from "path";
@@ -138,34 +138,6 @@ function byeNow(socket, host, port, conversationID, byeCommand)
         });
 }
 
-// function startDVRConversation(socket, host, port, connectionID)
-// {
-//         return UDPSendCommandGetResponce(socket, host, port,
-//                 new Cmd28(Cmd28Head_10001, connectionID),
-//                 (msg) => msg.readUint32LE(0) == Cmd28Head_10001);
-//         // return new Promise((resolve, reject) => {
-//         //         socket.on('message', function (msg, info) {
-
-//         //                 console.log('[1] Received %d bytes from %s:%d\t%s', 
-//         //                         msg.length, info.address, info.port, msg.toString('hex'));
-        
-//         //                 // step 1: got Ack responce from NAT point
-//         //                 if (msg.readUint32LE(0) == Cmd28Head_10001) {
-//         //                         // console.log('Responce 1 received, keep conversation');
-
-//         //                         resolve();
-//         //                 }
-
-//         //         });
-
-//         //         // Initiate exchange with DVR by Cmd28
-//         //         const cmd28Request = new Cmd28(Cmd28Head_10001, connectionID);
-//         //         socket.send(Buffer.from(serializeCmd28(cmd28Request)), port, host);
-
-//         //         setTimeout(() => reject('NAT10002Request connection timeout'), 5000);
-//         // });
-// }
-
 // Conversation with NAT point to get DVR IP
 export function NATDiscover(NATHost, NATPort)
 {
@@ -192,23 +164,35 @@ export function NATDiscover(NATHost, NATPort)
 
 export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
 {
-        const convID = new Date().valueOf() & 0x7FFFFFFF;
+        const connID = new Date().valueOf() & 0x7FFFFFFF;
 
         const DVRSocket = udp.createSocket('udp4');
 
-        const cmd28_1 = new Cmd28(Cmd28.Head_DVR, convID, 0, 0, convID, 0);
-        const cmd28_2 = new Cmd28(Cmd28.Head_DVR, convID, convID - 1, 0, convID, convID);
-        const cmd28_3 = new Cmd28(Cmd28.Head_DVR, convID, convID - 1, convID - 1, convID, convID + 1);
+        // -- chunk 1 => to get 'Cmd88'
+        const cmd28_1 = new Cmd28(Cmd28.Head_DVR, connID, 0, 0, connID, 0);
+        const cmd28_2 = new Cmd28(Cmd28.Head_DVR, connID, connID - 1, 0, connID, connID);
+        const cmd28_3 = new Cmd28(Cmd28.Head_DVR, connID, connID - 1, connID - 1, connID, connID + 1);
+
+        // -- chunk 2 => to get DVRAuth responce
+        const cmd24_2_1 = new Cmd24(Cmd24.Head_DVR, connID, connID - 1, connID, 0, connID + 1);
+        const auth_2_2 = new DVRAuth(connID, connID, connID, connID + 1, connID + 1);
 
         return new Promise((resolve, reject) => {
                 /// should be another socket that will stay open to continue DVR conversation
-                startNATConversation(DVRSocket, NATHost, NATPort, convID)
-                .then(() => NAT10002Request(DVRSocket, NATHost, NATPort, convID))
-                .then(() => byeNow(DVRSocket, NATHost, NATPort, convID, Cmd24.Head_020301))
+                startNATConversation(DVRSocket, NATHost, NATPort, connID)
+                .then(() => NAT10002Request(DVRSocket, NATHost, NATPort, connID))
+                .then(() => byeNow(DVRSocket, NATHost, NATPort, connID, Cmd24.Head_NAT))
                  
+                // --> chunk 1
                 .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_1, (msg) => cmd28(msg)))
                 .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_2, (msg) => cmd28(msg)))
                 .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_3, (msg) => headIs(msg, Cmd88.Head)))
+
+                // --> chunk 2, getting DRAuth responce
+                .then(() => {
+                        UDPSendCommand(DVRSocket, DVRHost, DVRPort, cmd24_2_1);
+                        return UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, auth_2_2, (msg) => headIs(msg, auth_2_2.CmdHead))
+                })
 
                 .then(() => resolve() )
                 .finally(() => DVRSocket.close() )
@@ -265,10 +249,24 @@ function UDPSendCommandGetResponce(socket, host, port, command, responce_validat
 
                         if (!socketClosed && !promiseResolved) 
                         {
-                                socket.send(Buffer.from(command.serialize()), port, host);
+                                UDPSendCommand(socket, host, port, command);
+                                // socket.send(Buffer.from(command.serialize()), port, host);
 
                                 setTimeout(() => { action(--counter); }, COMMAND_RESPONCE_TIMEOUT);
                         }
                 }
         });
 }
+
+/**
+ * Send command and forget.
+ * @param {*} socket UDP socket to communicate
+ * @param {*} host server address
+ * @param {*} port server port
+ * @param {*} command command to send
+ */
+function UDPSendCommand(socket, host, port, command)
+{
+        socket.send(Buffer.from(command.serialize()), port, host);
+}
+

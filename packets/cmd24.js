@@ -26,8 +26,8 @@ export class Cmd24
                 this.Data4 = data4;
         }
 
-        static get Head_020201() { return 0x00010202; }
-        static get Head_020301() { return 0x00010302; }
+        static get Head_DVR() { return 0x00010201; }
+        static get Head_NAT() { return 0x00010302; }
         
         serialize(cmd24)
         {
@@ -42,7 +42,7 @@ export function deserializeCmd24(buffer)
                 throw 'Wrong buffer length, unable to deserialize Cmd24.';
 
         const head = buffer.readUInt32LE(0 * 4);
-        if (head != Cmd24.Head_020201 && head != Cmd24.Head_020301)
+        if (head != Cmd24.Head_DVR && head != Cmd24.Head_NAT)
                 raise('Not Cmd24 command, unable to deserialize.');
 
         let cmd24 = new Cmd24();

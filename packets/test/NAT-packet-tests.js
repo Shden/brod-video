@@ -1,7 +1,8 @@
 import { Cmd28, deserializeCmd28 } from '../cmd28.js';
 import { Cmd24, deserializeCmd24 } from '../cmd24.js';
-import { NATReq, NATReqCmd, serializeNATReq, deserializeNATReq } from '../natReq.js';
+import { NATReq, NATReqCmd, serializeNATReq, deserializeNATReq } from '../NAT/natReq.js';
 import { BinPayload, deserializeBinPayload } from '../binPayload.js';
+import { DVRAuth } from '../binPayload.js';
 import * as should from 'should';
 
 const TEST_ID = 0x1F2E3D4C;
@@ -40,10 +41,10 @@ describe('Cmd24 packet tests:', () => {
 
         it('Serialization', () => {
 
-                const packet = new Cmd24(Cmd24.Head_020201, TEST_ID, TEST_ID+1, TEST_ID+2);
+                const packet = new Cmd24(Cmd24.Head_DVR, TEST_ID, TEST_ID+1, TEST_ID+2);
                 const buffer = packet.serialize();
 
-                buffer.readUInt32LE(0 * 4).should.be.equal(Cmd24.Head_020201);  
+                buffer.readUInt32LE(0 * 4).should.be.equal(Cmd24.Head_DVR);  
                 buffer.readUInt32LE(1 * 4).should.be.equal(TEST_ID);
                 buffer.readUInt32LE(2 * 4).should.be.equal(TEST_ID+1);
                 buffer.readUInt32LE(3 * 4).should.be.equal(TEST_ID+2)
@@ -51,7 +52,7 @@ describe('Cmd24 packet tests:', () => {
 
         it('Deserialization', () => {
 
-                const cmd24ToSerialize = new Cmd24(Cmd24.Head_020201, TEST_ID, TEST_ID+1);
+                const cmd24ToSerialize = new Cmd24(Cmd24.Head_DVR, TEST_ID, TEST_ID+1);
                 const deserializedCmd24 = deserializeCmd24(cmd24ToSerialize.serialize());
 
                 deserializedCmd24.CmdHead.should.be.equal(cmd24ToSerialize.CmdHead);
@@ -134,6 +135,27 @@ describe('BinPayload packet tests:', () => {
 
                 for (let j = 0; j < BUFFER_SIZE; j++)
                         deserializedPacket.payload.readUInt8(j).should.be.equal(packetToSerialize.payload.readUInt8(j));
+
+        });
+});
+
+describe('DVRAuth packet tests:', () => {
+
+        it('Serialization', () => {
+                
+                const args = Array.from({ length: 5 }, (value, index) => 0x45DF7916 + index);
+                const attachedBuffer = new Buffer.from(DVRAuth.Raw, "hex");
+                const packet = new DVRAuth(...args, attachedBuffer);
+                const buffer = packet.serialize();
+
+                buffer.readUInt32LE(0 * 4).should.be.equal(DVRAuth.Head);
+                for (let i = 1; i < 6; i++)                
+                        buffer.readUInt32LE(i * 4).should.be.equal(args[i-1]);
+                buffer.readUInt32LE(6 * 4).should.be.equal(DVRAuth.Tail);
+
+                attachedBuffer.length.should.be.equal(packet.payload.length);
+                for (let j = 0; j < attachedBuffer.length; j++)
+                        buffer.readUInt8(28 + j).should.be.equal(attachedBuffer[j]);
 
         });
 });

@@ -11,10 +11,10 @@
 // Cmd28 data structure 
 export class Cmd28
 {
-        constructor(head, id, data1 = 0, data2 = 0, data3 = 0, data4 = 0, tail = Cmd28.Tail)
+        constructor(head, connectionID, data1 = 0, data2 = 0, data3 = 0, data4 = 0, tail = Cmd28.Tail)
         {
                 this.CmdHead = head;
-                this.ConversationID = id;
+                this.ConnectionID = connectionID;
                 this.Data1 = data1;
                 this.Data2 = data2;
                 this.Data3 = data3;
@@ -28,26 +28,25 @@ export class Cmd28
 
         serialize()
         {
-                const u32 = new Uint32Array([this.CmdHead, this.ConversationID, this.Data1, this.Data2, this.Data3, this.Data4, this.CmdTail]);
+                const u32 = new Uint32Array([this.CmdHead, this.ConnectionID, this.Data1, this.Data2, this.Data3, this.Data4, this.CmdTail]);
                 return Buffer.from(u32.buffer);
         }
+
+        static deserialize(buffer)
+        {
+                if (buffer.length < 28)
+                        throw 'Wrong buffer length, unable to deserialize Cmd28.';
+                        
+                let cmd28 = new Cmd28();
+        
+                cmd28.CmdHead           = buffer.readUInt32LE(0 * 4); 
+                cmd28.ConnectionID      = buffer.readUInt32LE(1 * 4); 
+                cmd28.Data1             = buffer.readUInt32LE(2 * 4); 
+                cmd28.Data2             = buffer.readUInt32LE(3 * 4); 
+                cmd28.Data3             = buffer.readUInt32LE(4 * 4);
+                cmd28.Data4             = buffer.readUInt32LE(5 * 4); 
+                cmd28.CmdTail           = buffer.readUInt32LE(6 * 4);
+        
+                return cmd28;
+        }
 }
-
-export function deserializeCmd28(buffer)
-{
-        if (buffer.length < 28)
-                throw 'Wrong buffer length, unable to deserialize Cmd28.';
-                
-        let cmd28 = new Cmd28();
-
-        cmd28.CmdHead           = buffer.readUInt32LE(0 * 4); 
-        cmd28.ConversationID    = buffer.readUInt32LE(1 * 4); 
-        cmd28.Data1             = buffer.readUInt32LE(2 * 4); 
-        cmd28.Data2             = buffer.readUInt32LE(3 * 4); 
-        cmd28.Data3             = buffer.readUInt32LE(4 * 4);
-        cmd28.Data4             = buffer.readUInt32LE(5 * 4); 
-        cmd28.CmdTail           = buffer.readUInt32LE(6 * 4);
-
-        return cmd28;
-}
-

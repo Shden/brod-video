@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "dgram": "^1.0.1",
+    "uuid": "^9.0.0",
     "xml2js": "^0.4.23",
     "xmlhttprequest": "^1.8.0"
   },

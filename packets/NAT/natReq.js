@@ -17,47 +17,77 @@
 <<<<<<
 */
 
-export const NATReqCmd = 0x00010102;
-export const NATRespCmd = 0x88010102;
+import { Cmd28 } from "../cmd28.js";
 
 // NATReq data structure 
-export function NATReq(id1, id2, id3, id4, id5, data1, data2, xml)
+export class NATReq extends Cmd28 
 {
-        this.CmdHead = NATReqCmd;
-        this.UniqID1 = id1;
-        this.UniqID2 = id2;
-        this.UniqID3 = id3;
-        this.UniqID4 = id4;
-        this.UniqID5 = id5;
-        this.Data1 = data1;
-        this.Data2 = data2;
-        this.XML = xml;
+        static get NATReqCmd() { return 0x00010102; }
+        static get Tail() { return 0x0100; }
+
+        constructor(connectionID, data1, data2, data3, data4, xml)
+        {
+                super(NATReq.NATReqCmd, connectionID, data1, data2, data3, data4, NATReq.Tail);
+                this.XMLLength = xml.length + 1;
+                this.XML = xml;
+        }
+
+        serialize()
+        {
+                const u32 = new Uint32Array([this.XMLLength]);
+                const b32 = Buffer.from(u32.buffer);
+                const btxt = new Buffer.from(this.XML + '\0');
+                return Buffer.concat([super.serialize(), b32, btxt]);
+        }
+
+        static deserialize(buffer)
+        {
+                if (buffer.readUInt32LE(0 * 4) != NATReq.NATReqCmd && buffer.readUInt32LE(0 * 4) != NATReq.NATRespCmd)
+                        raise('Not NATReq command, unable to deserialize.');
+        
+                const cmd = Cmd28.deserialize(buffer);
+                cmd.XMLLength   = buffer.readUInt32LE(7 * 4);
+                cmd.XML         = buffer.toString('ascii', 8 * 4, buffer.length-1);
+        
+                return cmd;
+        }
 }
 
-export function serializeNATReq(NATReq)
-{
-        const u32 = new Uint32Array([NATReq.CmdHead, NATReq.UniqID1, NATReq.UniqID2, NATReq.UniqID3, NATReq.UniqID4, NATReq.UniqID5, NATReq.Data1, NATReq.Data2]);
-        const b32 = Buffer.from(u32.buffer);
-        const btxt = new Buffer.from(NATReq.XML + '\0');
-        return Buffer.concat([b32, btxt]);
-}
+// 2320
+// 0000   45 00 01 0e ba a2 00 00 40 11 12 0f c0 a8 74 a3   E.......@.....t.
+// 0010   2f 5b 48 87 c3 22 23 1d 00 fa b4 c4 02 01 01 00   /[H.."#.........
+// 0020   b1 b2 94 05 b1 b2 94 05 b0 b2 94 05 b2 b2 94 05   ................
+// 0030   b1 b2 94 05 00 01 00 00 d2 00 00 00 3c 4e 61 74   ............<Nat
+// 0040   20 76 65 72 73 69 6f 6e 3d 22 30 2e 34 2e 30 2e    version="0.4.0.
+// 0050   31 22 3e 3c 43 6d 64 20 69 64 3d 22 31 30 30 30   1"><Cmd id="1000
+// 0060   32 22 3e 3c 52 65 71 75 65 73 74 53 65 71 3e 31   2"><RequestSeq>1
+// 0070   3c 2f 52 65 71 75 65 73 74 53 65 71 3e 3c 44 65   </RequestSeq><De
+// 0080   76 69 63 65 4e 6f 3e 4e 31 32 34 46 30 33 41 52   viceNo>N124F03AR
+// 0090   33 35 42 3c 2f 44 65 76 69 63 65 4e 6f 3e 3c 52   35B</DeviceNo><R
+// 00a0   65 71 75 65 73 74 50 65 65 72 4e 61 74 3e 30 3c   equestPeerNat>0<
+// 00b0   2f 52 65 71 75 65 73 74 50 65 65 72 4e 61 74 3e   /RequestPeerNat>
+// 00c0   3c 50 32 50 56 65 72 73 69 6f 6e 3e 31 2e 30 3c   <P2PVersion>1.0<
+// 00d0   2f 50 32 50 56 65 72 73 69 6f 6e 3e 3c 43 6f 6e   /P2PVersion><Con
+// 00e0   6e 65 63 74 69 6f 6e 49 64 3e 39 33 36 33 31 31   nectionId>936311
+// 00f0   35 33 3c 2f 43 6f 6e 6e 65 63 74 69 6f 6e 49 64   53</ConnectionId
+// 0100   3e 3c 2f 43 6d 64 3e 3c 2f 4e 61 74 3e 00         ></Cmd></Nat>.
 
-export function deserializeNATReq(buffer)
-{
-        if (buffer.readUInt32LE(0 * 4) != NATReqCmd && buffer.readUInt32LE(0 * 4) != NATRespCmd)
-                raise('Not NATReq command, unable to deserialize.');
+// 2433
+// 0000   45 00 01 0e 72 d0 00 00 40 11 59 e1 c0 a8 74 a3   E...r...@.Y...t.
+// 0010   2f 5b 48 87 c3 22 23 1d 00 fa b3 c4 02 01 01 00   /[H.."#.........
+// 0020   b1 b2 94 05 b2 b2 94 05 b0 b2 94 05 b2 b2 94 05   ................
+// 0030   b1 b2 94 05 00 01 00 00 d2 00 00 00 3c 4e 61 74   ............<Nat
+// 0040   20 76 65 72 73 69 6f 6e 3d 22 30 2e 34 2e 30 2e    version="0.4.0.
+// 0050   31 22 3e 3c 43 6d 64 20 69 64 3d 22 31 30 30 30   1"><Cmd id="1000
+// 0060   32 22 3e 3c 52 65 71 75 65 73 74 53 65 71 3e 31   2"><RequestSeq>1
+// 0070   3c 2f 52 65 71 75 65 73 74 53 65 71 3e 3c 44 65   </RequestSeq><De
+// 0080   76 69 63 65 4e 6f 3e 4e 31 32 34 46 30 33 41 52   viceNo>N124F03AR
+// 0090   33 35 42 3c 2f 44 65 76 69 63 65 4e 6f 3e 3c 52   35B</DeviceNo><R
+// 00a0   65 71 75 65 73 74 50 65 65 72 4e 61 74 3e 30 3c   equestPeerNat>0<
+// 00b0   2f 52 65 71 75 65 73 74 50 65 65 72 4e 61 74 3e   /RequestPeerNat>
+// 00c0   3c 50 32 50 56 65 72 73 69 6f 6e 3e 31 2e 30 3c   <P2PVersion>1.0<
+// 00d0   2f 50 32 50 56 65 72 73 69 6f 6e 3e 3c 43 6f 6e   /P2PVersion><Con
+// 00e0   6e 65 63 74 69 6f 6e 49 64 3e 39 33 36 33 31 31   nectionId>936311
+// 00f0   35 33 3c 2f 43 6f 6e 6e 65 63 74 69 6f 6e 49 64   53</ConnectionId
+// 0100   3e 3c 2f 43 6d 64 3e 3c 2f 4e 61 74 3e 00         ></Cmd></Nat>.
 
-        let natReq = new NATReq();
-        natReq.CmdHead  = buffer.readUInt32LE(0 * 4);
-        natReq.UniqID1  = buffer.readUInt32LE(1 * 4);
-        natReq.UniqID2  = buffer.readUInt32LE(2 * 4);
-        natReq.UniqID3  = buffer.readUInt32LE(3 * 4);
-        natReq.UniqID4  = buffer.readUInt32LE(4 * 4);
-        natReq.UniqID5  = buffer.readUInt32LE(5 * 4);
-        natReq.Data1    = buffer.readUInt32LE(6 * 4);
-        natReq.Data2    = buffer.readUInt32LE(7 * 4);
-
-        natReq.XML      = buffer.toString('ascii', 8 * 4, buffer.length-1);
-
-        return natReq;
-}

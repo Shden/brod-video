@@ -16,10 +16,10 @@
 // Bye24 data structure 
 export class Cmd24
 {
-        constructor(cmd24Head, conversationID, data1, data2 = 0, data3 = 0, data4 = 0)
+        constructor(cmd24Head, connectionID, data1, data2 = 0, data3 = 0, data4 = 0)
         {
                 this.CmdHead = cmd24Head;
-                this.ConversationID = conversationID;
+                this.ConnectionID = connectionID;
                 this.Data1 = data1;
                 this.Data2 = data2;
                 this.Data3 = data3;
@@ -31,28 +31,24 @@ export class Cmd24
         
         serialize(cmd24)
         {
-                const u32 = new Uint32Array([this.CmdHead, this.ConversationID, this.Data1, this.Data2, this.Data3, this.Data4]);
+                const u32 = new Uint32Array([this.CmdHead, this.ConnectionID, this.Data1, this.Data2, this.Data3, this.Data4]);
                 return Buffer.from(u32.buffer);
         }
-}
 
-export function deserializeCmd24(buffer)
-{
-        if (buffer.length !== 24)
-                throw 'Wrong buffer length, unable to deserialize Cmd24.';
-
-        const head = buffer.readUInt32LE(0 * 4);
-        if (head != Cmd24.Head_DVR && head != Cmd24.Head_NAT)
-                raise('Not Cmd24 command, unable to deserialize.');
-
-        let cmd24 = new Cmd24();
-        cmd24.CmdHead           = head;
-        cmd24.ConversationID    = buffer.readUInt32LE(1 * 4);
-        cmd24.Data1             = buffer.readUInt32LE(2 * 4);
-        cmd24.Data2             = buffer.readUInt32LE(3 * 4);
-        cmd24.Data3             = buffer.readUInt32LE(4 * 4);
-        cmd24.Data4             = buffer.readUInt32LE(5 * 4);
-
-        return cmd24;
+        static deserialize(buffer)
+        {
+                if (buffer.length < 24)
+                        throw 'Wrong buffer length, unable to deserialize Cmd24.';
+        
+                let cmd24 = new Cmd24();
+                cmd24.CmdHead           = buffer.readUInt32LE(0 * 4);
+                cmd24.ConnectionID      = buffer.readUInt32LE(1 * 4);
+                cmd24.Data1             = buffer.readUInt32LE(2 * 4);
+                cmd24.Data2             = buffer.readUInt32LE(3 * 4);
+                cmd24.Data3             = buffer.readUInt32LE(4 * 4);
+                cmd24.Data4             = buffer.readUInt32LE(5 * 4);
+        
+                return cmd24;
+        }
 }
 

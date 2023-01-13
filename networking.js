@@ -19,37 +19,36 @@ const NAT_TIMEOUT = 2000;
 // 1931	8.052920	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100e1b094050000000000000000e1b0940500000000fefe0001
 // 1988	8.054486	47.91.72.135	192.168.116.163	UDP	8989 → 12520 Len=28	02000100e1b09405e0b0940500000000e1b09405e1b09405fefe0001
 // 1992	8.054577	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100e1b09405e0b09405e0b09405e1b09405e2b09405fefe0001
-function startNATConversation(socket, host, port, connectionID)
+function NATHandshake(socket, host, port, connectionID)
 {
         return new Promise((resolve, reject) => {
 
                 socket.on('message', socketMessageHandler);
 
-                const helloRequest = new Cmd28(Cmd28.Head_NAT, connectionID, 0, 0, connectionID, 0);
-                UDPSendCommand(socket, host, port, helloRequest);
+                const handShake = new Cmd28(Cmd28.Head_NAT, connectionID, 0, 0, connectionID, 0);
+                UDPSendCommand(socket, host, port, handShake);
 
                 setTimeout(() => { 
                         socket.off('message', socketMessageHandler);
-                        reject('startNATConversation connection timeout'); 
+                        reject('NATHandshake connection timeout'); 
                 }, NAT_TIMEOUT);
 
                 function socketMessageHandler(msg, info) {
                         if (info.address === host && info.port == port) {
                                 LogReceivedMessage(msg, info);
-                                // // got Ack responce from NAT point
+                                // got Ack responce from NAT point
                                 if (msg.readUint32LE(0) == Cmd28.Head_NAT) {
-                                        // console.log('Responce 1 received, keep conversation');
-                                        let helloResponse = Cmd28.deserialize(msg);
-                                        // console.log('Received ACK responce from %s:%d\t%j', info.address, info.port, ackResponse);
-                                        // mimicing UDP chat - no clue what Data{x} fields mean
-                                        helloResponse.Data2 = helloResponse.Data1;
-                                        helloResponse.Data4 += 1;
+
+                                        let handshakeResponse = Cmd28.deserialize(msg);
+                                        // see doc/conversations/DVR conversation 24122022.xlsm packet 1992 and 2319
+                                        handshakeResponse.Data2 = handshakeResponse.Data1;
+                                        handshakeResponse.Data4 += 1;
         
-                                        // send 2nd hello request
-                                        UDPSendCommand(socket, host, port, helloResponse);
+                                        // send 2nd handshake request
+                                        UDPSendCommand(socket, host, port, handshakeResponse);
         
                                         socket.off('message', socketMessageHandler);
-                                        resolve(helloResponse);
+                                        resolve(handshakeResponse);
                                 }
                         }
                 }
@@ -212,7 +211,7 @@ export function NATDiscover(NATHost, NATPort)
         const NATSocket = udp.createSocket('udp4');
 
         return new Promise((resolve, reject) => {
-                startNATConversation(NATSocket, NATHost, NATPort, NATConversationID)
+                NATHandshake(NATSocket, NATHost, NATPort, NATConversationID)
                 .then(() => NAT10006Request(NATSocket, NATHost, NATPort, NATConversationID))
                 .then((res) => { 
                         resolve({ 
@@ -272,7 +271,7 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
 
         return new Promise((resolve, reject) => {
                 /// should be another socket that will stay open to continue DVR conversation
-                startNATConversation(DVRSocket, NATHost, NATPort, connID)
+                NATHandshake(DVRSocket, NATHost, NATPort, connID)
                 .then((prevCmd) => NAT10102Request(DVRSocket, NATHost, NATPort, prevCmd))
                 .then(() => ack(DVRSocket, NATHost, NATPort, connID, Cmd24.Head_NAT))
                 .then(() => console.groupEnd())

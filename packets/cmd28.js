@@ -1,3 +1,5 @@
+import { Cmd24 } from "./cmd24.js";
+
 /* Initial exchange, goes as 3 28-byte UDP packets:
 
                                                                                         CmdHead  ConvID   Data1    Data2    Data3    Data4    CmdTail                  
@@ -8,17 +10,13 @@
 
 */
 
+
 // Cmd28 data structure 
-export class Cmd28
+export class Cmd28 extends Cmd24
 {
         constructor(head, connectionID, data1 = 0, data2 = 0, data3 = 0, data4 = 0, tail = Cmd28.Tail)
         {
-                this.CmdHead = head;
-                this.ConnectionID = connectionID;
-                this.Data1 = data1;
-                this.Data2 = data2;
-                this.Data3 = data3;
-                this.Data4 = data4;
+                super(head, connectionID, data1, data2, data3, data4);
                 this.CmdTail = tail;
         }
 
@@ -28,8 +26,8 @@ export class Cmd28
 
         serialize()
         {
-                const u32 = new Uint32Array([this.CmdHead, this.ConnectionID, this.Data1, this.Data2, this.Data3, this.Data4, this.CmdTail]);
-                return Buffer.from(u32.buffer);
+                const u32 = new Uint32Array([this.CmdTail]);
+                return Buffer.concat([super.serialize(), Buffer.from(u32.buffer)]);
         }
 
         static deserialize(buffer)
@@ -37,16 +35,8 @@ export class Cmd28
                 if (buffer.length < 28)
                         throw 'Wrong buffer length, unable to deserialize Cmd28.';
                         
-                let cmd28 = new Cmd28();
-        
-                cmd28.CmdHead           = buffer.readUInt32LE(0 * 4); 
-                cmd28.ConnectionID      = buffer.readUInt32LE(1 * 4); 
-                cmd28.Data1             = buffer.readUInt32LE(2 * 4); 
-                cmd28.Data2             = buffer.readUInt32LE(3 * 4); 
-                cmd28.Data3             = buffer.readUInt32LE(4 * 4);
-                cmd28.Data4             = buffer.readUInt32LE(5 * 4); 
-                cmd28.CmdTail           = buffer.readUInt32LE(6 * 4);
-        
-                return cmd28;
+                const cmd24 = Cmd24.deserialize(buffer);
+                return new Cmd28(cmd24.CmdHead, cmd24.ConnectionID, 
+                        cmd24.Data1, cmd24.Data2, cmd24.Data3, cmd24.Data4, buffer.readUInt32LE(6 * 4));
         }
 }

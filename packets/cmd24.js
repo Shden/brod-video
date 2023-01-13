@@ -16,9 +16,9 @@
 // Bye24 data structure 
 export class Cmd24
 {
-        constructor(cmd24Head, connectionID, data1, data2 = 0, data3 = 0, data4 = 0)
+        constructor(head, connectionID, data1 = 0, data2 = 0, data3 = 0, data4 = 0)
         {
-                this.CmdHead = cmd24Head;
+                this.CmdHead = head;
                 this.ConnectionID = connectionID;
                 this.Data1 = data1;
                 this.Data2 = data2;

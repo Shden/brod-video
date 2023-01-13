@@ -19,13 +19,13 @@ const NAT_TIMEOUT = 2000;
 // 1931	8.052920	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100e1b094050000000000000000e1b0940500000000fefe0001
 // 1988	8.054486	47.91.72.135	192.168.116.163	UDP	8989 → 12520 Len=28	02000100e1b09405e0b0940500000000e1b09405e1b09405fefe0001
 // 1992	8.054577	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100e1b09405e0b09405e0b09405e1b09405e2b09405fefe0001
-function startNATConversation(socket, host, port, conversationID)
+function startNATConversation(socket, host, port, connectionID)
 {
         return new Promise((resolve, reject) => {
 
                 socket.on('message', socketMessageHandler);
 
-                const helloRequest = new Cmd28(Cmd28.Head_NAT, conversationID, 0, 0, conversationID);
+                const helloRequest = new Cmd28(Cmd28.Head_NAT, connectionID, 0, 0, connectionID, 0);
                 UDPSendCommand(socket, host, port, helloRequest);
 
                 setTimeout(() => { 

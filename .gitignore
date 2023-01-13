@@ -1,3 +1,4 @@
 /node_modules
 privateData.js
 /doc/conversations/~*
+/doc/conversations/.DS_Store

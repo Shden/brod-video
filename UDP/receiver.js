@@ -30,13 +30,11 @@ export function UDPReceiveMPBuffer(socket, host, port)
 
                 function HandleReceivedBuffer(msg, info)
                 {
-                        if (!promiseResolved) 
+                        if (!promiseResolved && msg.length > 28) 
                         {
                                 console.group('MP buffer received:');
                                 LogReceivedMessage(msg, info);
                                 console.groupEnd();
-                                // console.log('<-- Received MP unit, %d bytes from %s:%d\t%s', 
-                                //         msg.length, info.address, info.port, msg.toString('hex'));
         
                                 const binPayload = BinPayload.deserialize(msg);
                                 linearizer.push(binPayload);
@@ -51,7 +49,9 @@ export function UDPReceiveMPBuffer(socket, host, port)
                                         });
         
                                         socket.off('message', HandleReceivedBuffer);
-                                        resolve(linearizer.combinedBuffer);
+                                        const combinedBuffer = linearizer.combinedBuffer;
+                                        console.log('%d bytes MP buffer reconstructed.', combinedBuffer.length)
+                                        resolve(combinedBuffer);
                                 }
                         }
                 }

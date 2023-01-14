@@ -6,9 +6,9 @@ export class BinPayload extends Cmd24 {
 
         static get Head() { return 0x00010101; }
 
-        constructor(head, id, data1, data2, data3, data4, payload)
+        constructor(head, connectionID, data1, data2, data3, data4, payload)
         {
-                super(head, id, data1, data2, data3, data4);
+                super(head, connectionID, data1, data2, data3, data4);
                 this.payload = payload;
         }
 
@@ -62,9 +62,9 @@ export class DVRAuth extends BinPayload
         // Raw request without 24 bytes of cmd24 header
         static get Raw() { return `31313131fc000000030000010101000000000000ec000000030000000000000000000000000000000000000000000000000000000000000000000000${DvrUserName}0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000${DvrUserPass}00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a79506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000`; }
 
-        constructor(id, data1, data2, data3, data4)
+        constructor(connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo)
         {
-                super(DVRAuth.Head, id, data1, data2, data3, data4);
+                super(DVRAuth.Head, connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo);
                 this.payload = Buffer.from(DVRAuth.Raw, "hex");
         }
 

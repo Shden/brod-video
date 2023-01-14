@@ -9,50 +9,27 @@ import { VideoFeedRequest } from "./packets/binPayload.js";
 import { QueryNodeEncodeInfo } from "./packets/binPayload.js";
 import xml2js from "xml2js";
 import { v4 as uuidv4 } from 'uuid';
-import { UDPReceiveMPBuffer, UDPReceiveSPBuffer } from "./UDP/receiver.js";
+import { Transciever } from "./UDP/transciever.js";
 import { LogSentMessage, LogReceivedMessage } from "./UDP/logger.js";
-import { group, groupEnd } from "console";
 
 
 const NAT_TIMEOUT = 2000;
 
 // Initiate NAT point conversation:
-// 1931	8.052920	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100e1b094050000000000000000e1b0940500000000fefe0001
-// 1988	8.054486	47.91.72.135	192.168.116.163	UDP	8989 → 12520 Len=28	02000100e1b09405e0b0940500000000e1b09405e1b09405fefe0001
-// 1992	8.054577	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100e1b09405e0b09405e0b09405e1b09405e2b09405fefe0001
+// 1931	8.052920	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100|e1b09405|00000000|00000000|e1b09405|00000000|fefe0001
+// 1988	8.054486	47.91.72.135	192.168.116.163	UDP	8989 → 12520 Len=28	02000100|e1b09405|e0b09405|00000000|e1b09405|e1b09405|fefe0001
+// 1992	8.054577	192.168.116.163	47.91.72.135	UDP	12520 → 8989 Len=28	02000100|e1b09405|e0b09405|e0b09405|e1b09405|e2b09405|fefe0001
 function NATHandshake(socket, host, port, connectionID)
 {
         return new Promise((resolve, reject) => {
 
-                socket.on('message', socketMessageHandler);
-
-                const handShake = new Cmd28(Cmd28.Head_NAT, connectionID, 0, 0, connectionID, 0);
-                UDPSendCommand(socket, host, port, handShake);
-
-                setTimeout(() => { 
-                        socket.off('message', socketMessageHandler);
-                        reject('NATHandshake connection timeout'); 
-                }, NAT_TIMEOUT);
-
-                function socketMessageHandler(msg, info) {
-                        if (info.address === host && info.port == port) {
-                                LogReceivedMessage(msg, info);
-                                // got Ack responce from NAT point
-                                if (msg.readUint32LE(0) == Cmd28.Head_NAT) {
-
-                                        let handshakeResponse = Cmd28.deserialize(msg);
-                                        // see doc/conversations/DVR conversation 24122022.xlsm packet 1992 and 2319
-                                        handshakeResponse.Data2 = handshakeResponse.Data1;
-                                        handshakeResponse.Data4 += 1;
-        
-                                        // send 2nd handshake request
-                                        UDPSendCommand(socket, host, port, handshakeResponse);
-        
-                                        socket.off('message', socketMessageHandler);
-                                        resolve(handshakeResponse);
-                                }
-                        }
-                }
+                const handShake1 = new Cmd28(Cmd28.Head_NAT, connectionID, 0, 0, connectionID, 0);
+                // see doc/conversations/DVR conversation 24122022.xlsm packet 1992 and 2319
+                const handShake2 = new Cmd28(Cmd28.Head_NAT, connectionID, connectionID-1, connectionID-1, connectionID, connectionID+1);
+                Transciever.UDPSendCommandGetResponce(socket, host, port, handShake1, (msg) => cmd28(msg))
+                .then(() => Transciever.UDPSendCommand(socket, host, port, handShake2))
+                .then(() => resolve(handShake2))
+                .catch(() => reject('NATHandshake connection timeout'))
         });
 }
 
@@ -95,7 +72,7 @@ function NAT10006Request(socket, host, port, conversationID)
                 // send NAT request. Again, the meaninig of 5 ids and 2 datas is unclear
                 const NATRequest = new NATReq(conversationID, conversationID, conversationID, 
                         conversationID+1, conversationID+1, NAT10006XMLRequest);
-                UDPSendCommand(socket, host, port, NATRequest);
+                Transciever.UDPSendCommand(socket, host, port, NATRequest);
 
                 setTimeout(() => {
                         socket.off('message', socketMessageHandler);
@@ -128,7 +105,7 @@ function NAT10002Request(socket, host, port, prevCmd)
                 const NATRequest = new NATReq(prevCmd.ConnectionID, prevCmd.Data1 + 1, prevCmd.Data2, 
                         prevCmd.Data4, prevCmd.Data3, 
                         NAT10002XMLRequest);
-                UDPSendCommand(socket, host, port, NATRequest);
+                Transciever.UDPSendCommand(socket, host, port, NATRequest);
 
                 setTimeout(() => {
                         socket.off('message', socketMessageHandler);
@@ -141,69 +118,7 @@ function NAT10002Request(socket, host, port, prevCmd)
 function ack(socket, host, port, conversationID, byeCommand)
 {
         const byeRequest = new Cmd24(byeCommand, conversationID, conversationID-1);
-        UDPSendCommand(socket, host, port, byeRequest);
-}
-
-/**
- * Send command, await for the responce, validate responce. Repeat several times 
- * before give up. 
- * @param {*} socket UDP socket to communicate
- * @param {*} host server address
- * @param {*} port server port
- * @param {*} command command to send
- * @param {*} responce_validation_rule function to validate responce
- * @returns Promise resolved if valid response obtained, promise rejected otherwise.
- */
-function UDPSendCommandGetResponce(socket, host, port, command, responce_validation_rule)
-{
-        const COMMAND_RESPONCE_TIMEOUT = 1000;
-        const SEND_REPEATS_BEFORE_GIVEUP = 3; 
-
-        return new Promise((resolve, reject) => {
-
-                function HandleResponse(msg, info) 
-                {
-                        LogReceivedMessage(msg, info);
-
-                        if (responce_validation_rule(msg)) 
-                        {
-                                socket.off('message', HandleResponse);
-                                resolve(msg);
-                        }
-                }
-
-                let socketClosed = false;
-                socket.on('close', () => socketClosed = true);
-                socket.on('message', HandleResponse);
-
-                SendCommand(SEND_REPEATS_BEFORE_GIVEUP);
-
-                function SendCommand(repeatCounter) 
-                {
-                        if (!repeatCounter) 
-                        {
-                                socket.off('message', HandleResponse);
-                                reject('Responce timeout after: ' + command.serialize().toString("hex"));
-                        } else if (!socketClosed) {
-                                UDPSendCommand(socket, host, port, command);
-                                setTimeout(() => { SendCommand(--repeatCounter); }, COMMAND_RESPONCE_TIMEOUT);
-                        }
-                }
-        });
-}
- 
- /**
-  * Send command and forget.
-  * @param {*} socket UDP socket to communicate
-  * @param {*} host server address
-  * @param {*} port server port
-  * @param {*} command command to send
-  */
-export function UDPSendCommand(socket, host, port, command)
-{
-        const msg = Buffer.from(command.serialize());
-        socket.send(msg, port, host);
-        LogSentMessage(msg, host, port);
+        Transciever.UDPSendCommand(socket, host, port, byeRequest);
 }
 
 // Conversation with NAT point to get DVR IP
@@ -230,19 +145,19 @@ export function NATDiscover(NATHost, NATPort)
         });
 }
 
+function* commandNo(startCommandNo)
+{
+        let cno = startCommandNo;
+        while(true) yield cno++;
+}
+
 export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
 {
         const connID = new Date().valueOf() & 0x7FFFFFFF;
 
+        const clientCmdNo = commandNo(connID-1);
+
         const DVRSocket = udp.createSocket('udp4');
-
-        // -- chunk 1 => to get 'Cmd88'
-        const cmd28_1 = new Cmd28(Cmd28.Head_DVR, connID, 0, 0, connID, 0);
-        const cmd28_2 = new Cmd28(Cmd28.Head_DVR, connID, connID - 1, 0, connID, connID);
-        const cmd28_3 = new Cmd28(Cmd28.Head_DVR, connID, connID - 1, connID - 1, connID, connID + 1);
-
-        // -- chunk 2 => to get DVRAuth responce
-        const auth_2 = new DVRAuth(connID, connID, connID, connID + 1, connID + 1);
 
         // -- step 3 => Channel request
         const channelRequestConvID = connID + 4;
@@ -270,31 +185,44 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
         /* 2874 */
         const qnei_4_3 = new QueryNodeEncodeInfo(connID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID + 1, videoFeedConvID);
 
-        console.group('NAT conversation');
-
         return new Promise((resolve, reject) => {
                 // should be another socket that will stay open to continue DVR conversation (???? review comment)
+                console.group('NAT conversation');
                 NATHandshake(DVRSocket, NATHost, NATPort, connID)
                 .then((prevCmd) => NAT10002Request(DVRSocket, NATHost, NATPort, prevCmd))
                 .then(() => ack(DVRSocket, NATHost, NATPort, connID, Cmd24.Head_NAT))
                 .then(() => console.groupEnd())
+
                 .then(() => console.group('DVR conversation'))
                  
-                // --> DVR handshake see doc/conversations/DVR conversation 24122022.xlsm 2453-2508
-                .then(() => console.group('Handshake'))
-                .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_1, (msg) => cmd28(msg)))
-                .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_2, (msg) => cmd28(msg)))
-                .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_3, (msg) => cmd28(msg)))
+                // --> 1. DVR handshake see doc/conversations/DVR conversation 24122022.xlsm 2453-2508
+                .then(() => { return new Promise((resolve, reject) => {
+                        console.group('Handshake');
 
-                // -- Should receive Cmd88
-                .then(() => UDPReceiveSPBuffer(DVRSocket, DVRHost, DVRPort))
-                .then(() => console.groupEnd())
+                        const cmdNo = clientCmdNo.next().value;
+                        const cmd28_1 = new Cmd28(Cmd28.Head_DVR, connID, 0, 0, connID, 0);
+                        const cmd28_2 = new Cmd28(Cmd28.Head_DVR, connID, cmdNo, 0, connID, connID);
+                        const cmd28_3 = new Cmd28(Cmd28.Head_DVR, connID, cmdNo, connID - 1, connID, connID + 1);
 
-                // --> chunk 2, DRAuth
-                .then(() => console.group('DRAuth'))
-                .then(() => UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, auth_2, (msg) => cmd24(msg)))
-                .then((res) => UDPReceiveMPBuffer(DVRSocket, DVRHost, DVRPort) )
-                .then(() => console.groupEnd())
+                        Transciever.UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_1, (msg) => cmd28(msg))
+                        .then(() => Transciever.UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_2, (msg) => cmd28(msg)))
+                        .then(() => Transciever.UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, cmd28_3, (msg) => cmd28(msg)))
+                        // -- Receive Cmd88
+                        .then(() => Transciever.UDPReceiveSPBuffer(DVRSocket, DVRHost, DVRPort))
+                        .then(() => resolve())
+                        .finally(() => console.groupEnd())
+                })})
+
+                // --> 2. DRAuth
+                .then(() => { return new Promise((resolve, reject) => {
+                        console.group('DRAuth');
+                        const auth_2 = new DVRAuth(connID, clientCmdNo.next().value, connID, connID + 1, connID + 1);
+
+                        Transciever.UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, auth_2, (msg) => cmd24(msg))
+                        .then(() => Transciever.UDPReceiveMPBuffer(DVRSocket, DVRHost, DVRPort) )
+                        .then(() => resolve())
+                        .finally(() => console.groupEnd())
+                })})
 
                 // // --> step 3, ChannelRequest
                 // .then(() => {

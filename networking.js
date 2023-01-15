@@ -32,41 +32,12 @@ function NATHandshake(socket, host, port, connectionID)
         });
 }
 
+// Named as 10006 because of Cmd id="10006" in XML!
 function NAT10006Request(socket, host, port, connectionID)
 {
-        // TODO: reuse UDPSendCommandGetResponce here? Not sure...
         const NAT10006XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10006"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo></Cmd></Nat>`;
 
         return new Promise((resolve, reject) => {
-
-                // function socketMessageHandler(msg, info) {
-
-                //         // got NAT responce
-                //         if (msg.readUint32LE(0) == NATReq.NATReqCmd) {
-        
-                //                 const natResponce = NATReq.deserialize(msg);
-        
-                //                 // console.log(natResponce.XML);
-                //                 // convert XML to JSON
-                //                 xml2js.parseString(natResponce.XML, (err, result) => {
-                //                         if (err)
-                //                                 throw err;
-        
-                //                         // console.log("%j", result);
-                //                         if (result.Nat.Cmd[0].Status == 0) {
-                //                                 const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
-                //                                 const devicePort = parseInt(result.Nat.Cmd[0].DevicePeerPort[0]);
-        
-                //                                 // console.log('Device IP:', deviceIP);
-                //                                 // console.log('Device port:', devicePort);
-                //                                 socket.off('message', socketMessageHandler);
-                //                                 resolve({ host: deviceIP, port: devicePort });
-                //                                 return true;
-                //                         }
-                //                 });
-                //         }
-                //         return false;
-                // };
         
                 const NATRequest = new NATReq(connectionID, connectionID, connectionID, 
                         connectionID+1, connectionID+1, NAT10006XMLRequest);
@@ -99,6 +70,7 @@ function NAT10006Request(socket, host, port, connectionID)
         });
 }
 
+// Named as 10006 because of Cmd id="10002" in XML!
 function NAT10002Request(socket, host, port, connectionID)
 {
         const NAT10002XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10002"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo><RequestPeerNat>0</RequestPeerNat><P2PVersion>1.0</P2PVersion><ConnectionId>${connectionID}</ConnectionId></Cmd></Nat>`

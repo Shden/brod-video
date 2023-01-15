@@ -25,7 +25,7 @@ xhr.onload = function () {
                                 console.log(res);
                                 // DVRConnect(res.NAT.host, res.NAT.port, res.DVR.host, res.DVR.port);
                         })
-                        .catch(() => { console.log('123') });
+                        .catch((err) => { console.log(err) });
                 });
 
         } else {

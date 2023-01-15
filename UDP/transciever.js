@@ -2,18 +2,34 @@ import { UDPLinearizer } from "./linearizer.js";
 import { BinPayload } from "../packets/binPayload.js";
 import { Cmd24 } from "../packets/cmd24.js";
 import { LogReceivedMessage, LogSentMessage } from "./logger.js";
+import udp from "dgram";
 
 export class Transciever
 {
         /**
+         * 
+         * @param {String} host server address
+         * @param {Number} port server port
+         */
+        constructor(host, port)
+        {
+                this.host = host;
+                this.port = port;
+                this.socket = udp.createSocket('udp4');
+
+        }
+
+        close()
+        {
+                this.socket.close();
+        }
+
+        /**
          * Receive multipacket buffer with consistency, completeness and sequence check. 
          * Send acknowledge command for each successfully received incoming packet.
-         * @param {*} socket UDP socket to communicate
-         * @param {*} host server address
-         * @param {*} port server port
          * @returns promise to receive buffer.
          */
-        static UDPReceiveMPBuffer(socket, host, port)
+        UDPReceiveMPBuffer()
         {
                 const MP_BUFFER_RECEIVE_TIMEOUT = 2000;
 
@@ -22,15 +38,7 @@ export class Transciever
                         let promiseResolved = false;
                         const linearizer = new UDPLinearizer();
 
-                        socket.on('message', HandleReceivedBuffer);
-
-                        setTimeout(() => { 
-                                socket.off('message', HandleReceivedBuffer);
-                                reject('MP buffer receive timeout'); 
-                        }, MP_BUFFER_RECEIVE_TIMEOUT);
-
-                        function HandleReceivedBuffer(msg, info)
-                        {
+                        const HandleReceivedBuffer = (msg, info) => {
                                 if (!promiseResolved && msg.length > 28) 
                                 {
                                         console.group('MP buffer received:');
@@ -46,94 +54,88 @@ export class Transciever
                 
                                                 // acknowledge each received packet
                                                 linearizer.forEach((payload) => {
-                                                        Transciever.UDPAcknowledge(socket, host, port, payload);
+                                                        this.UDPAcknowledge(payload);
                                                 });
                 
-                                                socket.off('message', HandleReceivedBuffer);
+                                                this.socket.off('message', HandleReceivedBuffer);
                                                 const combinedBuffer = linearizer.combinedBuffer;
                                                 console.log('%d bytes MP buffer reconstructed.', combinedBuffer.length)
                                                 resolve(combinedBuffer);
                                         }
                                 }
                         }
+
+                        this.socket.on('message', HandleReceivedBuffer);
+
+                        setTimeout(() => { 
+                                this.socket.off('message', HandleReceivedBuffer);
+                                reject('MP buffer receive timeout'); 
+                        }, MP_BUFFER_RECEIVE_TIMEOUT);
                 });
         }
 
         /**
          * Acknowledge single payload received.
-         * @param {*} socket UDP socket to send acknowledgement.
-         * @param {String} host server address.
-         * @param {Number} port server port.
          * @param {Object} cmd to acknowledge.
          */
-         static UDPAcknowledge(socket, host, port, cmd)
+        UDPAcknowledge(cmd)
         {
                 const clientAck = new Cmd24(Cmd24.Head_DVR, cmd.ConnectionID, cmd.Data2, cmd.Data1, 0, cmd.Data3);
                 console.group('Acknowledgement');
-                Transciever.UDPSendCommand(socket, host, port, clientAck);
+                this.UDPSendCommand(clientAck);
                 console.groupEnd();
         }
 
         /**
          * Receive single-packet buffer and acknowledge.
-         * @param {*} socket UDP socket to communicate
-         * @param {String} host server address
-         * @param {Number} port server port
          * @returns promise to receive command.
          */
-         static UDPReceiveSPBuffer(socket, host, port)
+        UDPReceiveSPBuffer()
         {
                 const SP_BUFFER_RECEIVE_TIMEOUT = 2000;
 
                 return new Promise((resolve, reject) => {
 
-                        socket.on('message', HandleReceivedBuffer);
-
-                        setTimeout(() => { 
-                                socket.off('message', HandleReceivedBuffer);
-                                reject('SP buffer receive timeout'); 
-                        }, SP_BUFFER_RECEIVE_TIMEOUT);
-
-                        function HandleReceivedBuffer(msg, info)
-                        {
+                        const HandleReceivedBuffer = (msg, info) => {
                                 console.group('SP buffer received:');
                                 LogReceivedMessage(msg, info);
                                 console.groupEnd();
 
                                 const cmd = BinPayload.deserialize(msg); // Cmd24
-                                Transciever.UDPAcknowledge(socket, host, port, cmd);
+                                this.UDPAcknowledge(cmd);
 
-                                socket.off('message', HandleReceivedBuffer)
+                                this.socket.off('message', HandleReceivedBuffer)
                                 resolve(cmd);
                         }
+
+                        this.socket.on('message', HandleReceivedBuffer);
+
+                        setTimeout(() => { 
+                                this.socket.off('message', HandleReceivedBuffer);
+                                reject('SP buffer receive timeout'); 
+                        }, SP_BUFFER_RECEIVE_TIMEOUT);
                 });
         }
  
         /**
          * Send command and forget.
-         * @param {*} socket UDP socket to communicate
-         * @param {*} host server address
-         * @param {*} port server port
          * @param {*} command command to send
          */
-        static UDPSendCommand(socket, host, port, command)
+        UDPSendCommand(command)
         {
                 const msg = Buffer.from(command.serialize());
-                socket.send(msg, port, host);
-                LogSentMessage(msg, host, port);
+                this.socket.send(msg, this.port, this.host);
+                LogSentMessage(msg, this.host, this.port);
         }
   
         /**
          * Send command, await for the responce, validate responce. Repeat several times 
          * before give up. 
-         * @param {*} socket UDP socket to communicate
-         * @param {*} host server address
-         * @param {*} port server port
          * @param {*} command command to send
          * @param {*} responce_validation_rule function to validate responce
          * @returns Promise resolved if valid response obtained, promise rejected otherwise.
          */
-        static UDPSendCommandGetResponce(socket, host, port, command, responce_validation_rule)
+        UDPSendCommandGetResponce(command, responce_validation_rule)
         {
                 const COMMAND_RESPONCE_TIMEOUT = 1000;
                 const SEND_REPEATS_BEFORE_GIVEUP = 3; 
@@ -141,41 +143,40 @@ export class Transciever
                 return new Promise((resolve, reject) => {
 
                         let gotResponse = false;
+                        let socketClosed = false;
         
-                        function HandleResponse(msg, info) 
+                        const HandleResponse = (msg, info) => 
                         {
                                 LogReceivedMessage(msg, info);
         
                                 if (responce_validation_rule(msg)) 
                                 {
-                                        socket.off('message', HandleResponse);
+                                        this.socket.off('message', HandleResponse);
                                         gotResponse = true;
                                         resolve(msg);
                                 }
                         }
         
-                        let socketClosed = false;
-                        socket.on('close', () => socketClosed = true);
-                        socket.on('message', HandleResponse);
-        
-                        SendCommandRetry(SEND_REPEATS_BEFORE_GIVEUP);
-        
-                        function SendCommandRetry(repeatCounter) 
+                        const SendCommandRetry = (repeatCounter) => 
                         {
                                 if (repeatCounter) 
                                 {
 	                                if (!gotResponse && !socketClosed) 
                                         {
-                                                Transciever.UDPSendCommand(socket, host, port, command);
+                                                this.UDPSendCommand(command);
                                                 setTimeout(() => { SendCommandRetry(--repeatCounter); }, COMMAND_RESPONCE_TIMEOUT);
                                         }
                                 }
                                 else
                                 {
-                                        socket.off('message', HandleResponse);
+                                        this.socket.off('message', HandleResponse);
                                         reject('Responce timeout after: ' + command.serialize().toString("hex"));
                                 }                             
                         }
+                        this.socket.on('close', () => socketClosed = true);
+                        this.socket.on('message', HandleResponse);
+        
+                        SendCommandRetry(SEND_REPEATS_BEFORE_GIVEUP);
                 });
         }
 }

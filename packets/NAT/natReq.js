@@ -45,6 +45,7 @@ export class NATReq extends Cmd28
                 if (buffer.readUInt32LE(0 * 4) != NATReq.NATReqCmd && buffer.readUInt32LE(0 * 4) != NATReq.NATRespCmd)
                         raise('Not NATReq command, unable to deserialize.');
         
+                // TODO: Refactor to return instance of NATReq instead of Cmd28 (see BinPayload)
                 const cmd = Cmd28.deserialize(buffer);
                 cmd.XMLLength   = buffer.readUInt32LE(7 * 4);
                 cmd.XML         = buffer.toString('ascii', 8 * 4, buffer.length-1);

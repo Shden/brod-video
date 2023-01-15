@@ -13,19 +13,19 @@ xhr.onload = function () {
                 // console.log( xhr.responseText )
                 
                 // convert XML to JSON
-                xml2js.parseString(xhr.responseText, (err, result) => {
+                xml2js.parseString(xhr.responseText, (err, xmlObj) => {
                         if (err) throw err
 
                         // map addresses and ports to a vector of promises
-                        const NATPointsDiscovery = result.NatServerList.Item.map((NATPoint) => {
-                                return NATDiscover(NATPoint.Addr[0], parseInt(NATPoint.Port[0]))
-                        });
-
-                        // first NAT point responce wins
-                        Promise.race(NATPointsDiscovery).then((res) => {
+                        // first NAT point fulfilled (any!) responce wins
+                        Promise.any(xmlObj.NatServerList.Item.map(NATPoint => 
+                                        NATDiscover(NATPoint.Addr[0], parseInt(NATPoint.Port[0])) 
+                        ))
+                        .then((res) => {
                                 console.log(res);
-                                DVRConnect(res.NAT.host, res.NAT.port, res.DVR.host, res.DVR.port);
-                         });
+                                // DVRConnect(res.NAT.host, res.NAT.port, res.DVR.host, res.DVR.port);
+                        })
+                        .catch(() => { console.log('123') });
                 });
 
         } else {

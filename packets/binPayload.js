@@ -21,11 +21,12 @@ export class BinPayload extends Cmd24 {
         {
                 const CMD24_LEN = 24;
 
-                const binPayload = Cmd24.deserialize(buffer);
-                binPayload.payload = Buffer.allocUnsafe(buffer.length - CMD24_LEN);
-                buffer.copy(binPayload.payload, 0, CMD24_LEN, buffer.length);
+                const cmd24 = Cmd24.deserialize(buffer);
+                const payload = Buffer.allocUnsafe(buffer.length - CMD24_LEN);
+                buffer.copy(payload, 0, CMD24_LEN, buffer.length);
         
-                return binPayload;
+                return new BinPayload(cmd24.CmdHead, cmd24.ConnectionID, cmd24.Data1, cmd24.Data2,
+                        cmd24.Data3, cmd24.Data4, payload);
         }
         
 }

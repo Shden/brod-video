@@ -10,7 +10,6 @@ import { QueryNodeEncodeInfo } from "./packets/binPayload.js";
 import xml2js from "xml2js";
 import { v4 as uuidv4 } from 'uuid';
 import { Transciever } from "./UDP/transciever.js";
-import { LogSentMessage, LogReceivedMessage } from "./UDP/logger.js";
 
 
 const NAT_TIMEOUT = 2000;
@@ -28,90 +27,87 @@ function NATHandshake(socket, host, port, connectionID)
                 const handShake2 = new Cmd28(Cmd28.Head_NAT, connectionID, connectionID-1, connectionID-1, connectionID, connectionID+1);
                 Transciever.UDPSendCommandGetResponce(socket, host, port, handShake1, (msg) => cmd28(msg))
                 .then(() => Transciever.UDPSendCommand(socket, host, port, handShake2))
-                .then(() => resolve(handShake2))
-                .catch(() => reject('NATHandshake connection timeout'))
+                .then(() => resolve())
+                .catch(() => reject(`NATHandshake failed with ${host}:${port}`))
         });
 }
 
-function NAT10006Request(socket, host, port, conversationID)
+function NAT10006Request(socket, host, port, connectionID)
 {
         // TODO: reuse UDPSendCommandGetResponce here? Not sure...
         const NAT10006XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10006"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo></Cmd></Nat>`;
 
         return new Promise((resolve, reject) => {
 
-                const socketMessageHandler = function (msg, info) {
+                // function socketMessageHandler(msg, info) {
 
-                        // got NAT responce
-                        if (msg.readUint32LE(0) == NATReq.NATReqCmd) {
-
-                                const natResponce = NATReq.deserialize(msg);
-
-                                // console.log(natResponce.XML);
-                                // convert XML to JSON
-                                xml2js.parseString(natResponce.XML, (err, result) => {
-                                        if (err)
-                                                throw err;
-
-                                        // console.log("%j", result);
-                                        if (result.Nat.Cmd[0].Status == 0) {
-                                                const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
-                                                const devicePort = parseInt(result.Nat.Cmd[0].DevicePeerPort[0]);
-
-                                                // console.log('Device IP:', deviceIP);
-                                                // console.log('Device port:', devicePort);
-                                                socket.off('message', socketMessageHandler);
-                                                resolve({ host: deviceIP, port: devicePort });
-                                        }
-                                });
-                        }
-                };
-
-                socket.on('message', socketMessageHandler);
-
-                // send NAT request. Again, the meaninig of 5 ids and 2 datas is unclear
-                const NATRequest = new NATReq(conversationID, conversationID, conversationID, 
-                        conversationID+1, conversationID+1, NAT10006XMLRequest);
+                //         // got NAT responce
+                //         if (msg.readUint32LE(0) == NATReq.NATReqCmd) {
+        
+                //                 const natResponce = NATReq.deserialize(msg);
+        
+                //                 // console.log(natResponce.XML);
+                //                 // convert XML to JSON
+                //                 xml2js.parseString(natResponce.XML, (err, result) => {
+                //                         if (err)
+                //                                 throw err;
+        
+                //                         // console.log("%j", result);
+                //                         if (result.Nat.Cmd[0].Status == 0) {
+                //                                 const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
+                //                                 const devicePort = parseInt(result.Nat.Cmd[0].DevicePeerPort[0]);
+        
+                //                                 // console.log('Device IP:', deviceIP);
+                //                                 // console.log('Device port:', devicePort);
+                //                                 socket.off('message', socketMessageHandler);
+                //                                 resolve({ host: deviceIP, port: devicePort });
+                //                                 return true;
+                //                         }
+                //                 });
+                //         }
+                //         return false;
+                // };
+        
+                const NATRequest = new NATReq(connectionID, connectionID, connectionID, 
+                        connectionID+1, connectionID+1, NAT10006XMLRequest);
                 Transciever.UDPSendCommand(socket, host, port, NATRequest);
+                Transciever.UDPReceiveSPBuffer(socket, host, port)
+                .then((cmd) => {
+                        if (cmd.CmdHead == NATReq.NATReqCmd) {
+	                        const natResponce = NATReq.deserialize(cmd.serialize());
+	                        xml2js.parseString(natResponce.XML, (err, result) => {
+	                                if (err) reject(err);
 
-                setTimeout(() => {
-                        socket.off('message', socketMessageHandler);
-                        reject('NAT10006Request connection timeout')
-                }, NAT_TIMEOUT);
+	                                if (result.Nat.Cmd[0].Status == 0) {
+	                                        const deviceIP = result.Nat.Cmd[0].DevicePeerIp[0];
+	                                        const devicePort = parseInt(result.Nat.Cmd[0].DevicePeerPort[0]);
+	
+	                                        resolve({ host: deviceIP, port: devicePort });
+	                                }
+                                        else
+                                        {
+                                                reject();
+                                        }
+	                        });
+                        }
+                        else
+                        {
+                                reject();
+                        }
+                })
+                .catch(() => reject(`NAT10006Request failed with ${host}:${port}`))
         });
 }
 
-function NAT10002Request(socket, host, port, prevCmd)
+function NAT10002Request(socket, host, port, connectionID)
 {
-        // TODO: reuse UDPSendCommandGetResponce here?
-        const NAT10002XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10002"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo><RequestPeerNat>0</RequestPeerNat><P2PVersion>1.0</P2PVersion><ConnectionId>${prevCmd.ConnectionID}</ConnectionId></Cmd></Nat>`
+        const NAT10002XMLRequest = `<Nat version="0.4.0.1"><Cmd id="10002"><RequestSeq>1</RequestSeq><DeviceNo>${serialNumber}</DeviceNo><RequestPeerNat>0</RequestPeerNat><P2PVersion>1.0</P2PVersion><ConnectionId>${connectionID}</ConnectionId></Cmd></Nat>`
 
-        return new Promise((resolve, reject) => {
-
-                function socketMessageHandler(msg, info) 
-                {
-                        // got NAT responce
-                        if (msg.readUint32LE(0) == NATReq.NATReqCmd) 
-                        {
-                                LogReceivedMessage(msg, info);
-                                socket.off('message', socketMessageHandler);
-                                resolve(prevCmd.ConnectionID);
-                        }
-                };
-
-                socket.on('message', socketMessageHandler);
-
-                // send NAT request. See doc/conversations/NAT conversation 24122022.xlsm packet ref 1993
-                const NATRequest = new NATReq(prevCmd.ConnectionID, prevCmd.Data1 + 1, prevCmd.Data2, 
-                        prevCmd.Data4, prevCmd.Data3, 
-                        NAT10002XMLRequest);
-                Transciever.UDPSendCommand(socket, host, port, NATRequest);
-
-                setTimeout(() => {
-                        socket.off('message', socketMessageHandler);
-                        reject('NAT10102Request connection timeout');
-                }, NAT_TIMEOUT);
-        });
+        // send NAT request. See doc/conversations/NAT conversation 24122022.xlsm packet ref 1993
+        const NATRequest = new NATReq(connectionID, connectionID, connectionID-1, 
+                connectionID+1, connectionID, 
+                NAT10002XMLRequest);
+        return Transciever.UDPSendCommandGetResponce(socket, host, port, NATRequest, (msg) => headIs(msg, NATReq.NATReqCmd))
 }
 
 // send Acknowledge command
@@ -130,18 +126,19 @@ export function NATDiscover(NATHost, NATPort)
 
         return new Promise((resolve, reject) => {
                 NATHandshake(NATSocket, NATHost, NATPort, NATConversationID)
+                // ref: #1993 see doc/conversations/NAT conversation 24122022.xlsm
                 .then(() => NAT10006Request(NATSocket, NATHost, NATPort, NATConversationID))
-                .then((res) => { 
-                        resolve({ 
+                .then((res) => resolve({ 
                                 NAT: { host: NATHost, port: NATPort}, 
-                                DVR: { host: res.host, port: res.port }}); 
-                        })
-                .then(() => ack(NATSocket, NATHost, NATPort, NATConversationID, Cmd24_020201))
-                .then(() => ack(NATSocket, NATHost, NATPort, NATConversationID, Cmd24_020301))
-
-
-                .catch((reason) => { /*console.log("Exception:", reason);*/ reject(reason);})
-                .finally(() => { NATSocket.close(); } )
+                                DVR: { host: res.host, port: res.port }}) 
+                )
+                // .then(() => ack(NATSocket, NATHost, NATPort, NATConversationID, Cmd24.Head_DVR))
+                // .then(() => ack(NATSocket, NATHost, NATPort, NATConversationID, Cmd24.Head_NAT))
+                .catch((reason) => reject(reason) )
+                .finally(() => {
+                        ack(NATSocket, NATHost, NATPort, NATConversationID, Cmd24.Head_NAT);
+                        NATSocket.close();
+                })
         });
 }
 
@@ -189,7 +186,7 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
                 // should be another socket that will stay open to continue DVR conversation (???? review comment)
                 console.group('NAT conversation');
                 NATHandshake(DVRSocket, NATHost, NATPort, connID)
-                .then((prevCmd) => NAT10002Request(DVRSocket, NATHost, NATPort, prevCmd))
+                .then(() => NAT10002Request(DVRSocket, NATHost, NATPort, connID))
                 .then(() => ack(DVRSocket, NATHost, NATPort, connID, Cmd24.Head_NAT))
                 .then(() => console.groupEnd())
 

@@ -29,7 +29,7 @@ export class Cmd24
         static get Head_DVR() { return 0x00010201; }
         static get Head_NAT() { return 0x00010302; }
         
-        serialize(cmd24)
+        serialize()
         {
                 const u32 = new Uint32Array([this.CmdHead, this.ConnectionID, this.Data1, this.Data2, this.Data3, this.Data4]);
                 return Buffer.from(u32.buffer);

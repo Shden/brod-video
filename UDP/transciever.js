@@ -7,7 +7,7 @@ import udp from "dgram";
 export class Transciever
 {
         /**
-         * 
+         * Create instance of transciever to communicate to provided host/port.
          * @param {String} host server address
          * @param {Number} port server port
          */
@@ -16,7 +16,7 @@ export class Transciever
                 this.host = host;
                 this.port = port;
                 this.socket = udp.createSocket('udp4');
-
+                this.connectionID = new Date().valueOf() & 0x7FFFFFFF;
         }
 
         close()

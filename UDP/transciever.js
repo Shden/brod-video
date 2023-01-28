@@ -1,6 +1,7 @@
 import { UDPLinearizer } from "./linearizer.js";
 import { BinPayload } from "../packets/binPayload.js";
 import { Cmd24 } from "../packets/cmd24.js";
+import { Cmd28 } from "../packets/cmd28.js";
 import { LogReceivedMessage, LogSentMessage } from "./logger.js";
 import udp from "dgram";
 
@@ -10,13 +11,16 @@ export class Transciever
          * Create instance of transciever to communicate to provided host/port.
          * @param {String} host server address
          * @param {Number} port server port
+         * @param {Number} connectionID
          */
-        constructor(host, port)
+        constructor(host, port, connectionID = 0)
         {
                 this.host = host;
                 this.port = port;
                 this.socket = udp.createSocket('udp4');
-                this.connectionID = new Date().valueOf() & 0x7FFFFFFF;
+                this.socket.on('error', (err) => console.log(err));
+                this.socket.connect(port, host);
+                this.connectionID = (connectionID) ? connectionID : new Date().valueOf() & 0x7FFFFFFF;
         }
 
         close()
@@ -145,16 +149,21 @@ export class Transciever
                         let gotResponse = false;
                         let socketClosed = false;
         
-                        const HandleResponse = (msg, info) => 
+                        const MessageHandler = (msg, info) => 
                         {
                                 LogReceivedMessage(msg, info);
         
                                 if (responce_validation_rule(msg)) 
                                 {
-                                        this.socket.off('message', HandleResponse);
+                                        this.socket.off('message', MessageHandler);
+                                        this.socket.off('close', CloseHandler);
                                         gotResponse = true;
                                         resolve(msg);
                                 }
+                        }
+
+                        const CloseHandler = () => {
+                                socketClosed = true;
                         }
         
                         const SendCommandRetry = (repeatCounter) => 
@@ -164,17 +173,18 @@ export class Transciever
 	                                if (!gotResponse && !socketClosed) 
                                         {
                                                 this.UDPSendCommand(command);
-                                                setTimeout(() => { SendCommandRetry(--repeatCounter); }, COMMAND_RESPONCE_TIMEOUT);
+                                                setTimeout(() => SendCommandRetry(--repeatCounter), COMMAND_RESPONCE_TIMEOUT);
                                         }
                                 }
                                 else
                                 {
-                                        this.socket.off('message', HandleResponse);
+                                        this.socket.off('message', MessageHandler);
+                                        this.socket.off('close', CloseHandler);
                                         reject('Responce timeout after: ' + command.serialize().toString("hex"));
                                 }                             
                         }
-                        this.socket.on('close', () => socketClosed = true);
-                        this.socket.on('message', HandleResponse);
+                        this.socket.on('close', CloseHandler);
+                        this.socket.on('message', MessageHandler);
         
                         SendCommandRetry(SEND_REPEATS_BEFORE_GIVEUP);
                 });

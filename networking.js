@@ -96,6 +96,7 @@ function NAT10006Request(transciever)
                 transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATReq.NATReqCmd))
                 .then((msg) => {
                         const natResponce = NATReq.deserialize(msg);
+                        transciever.UDPAcknowledge(natResponce);
                         xml2js.parseString(natResponce.XML, (err, result) => {
                                 if (err) reject(err);
 
@@ -129,9 +130,11 @@ function NAT10002Request(transciever, DVRconnectionID)
                 const NATRequest = new NATReq(transciever.connectionID, transciever.connectionID, 
                         transciever.connectionID - 1, transciever.connectionID + 1, transciever.connectionID, 
                         NAT10002XMLRequest);
+
                 transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATReq.NATReqCmd))
                 .then((msg) => {
                         const natResponce = NATReq.deserialize(msg);
+                        transciever.UDPAcknowledge(natResponce);
                         xml2js.parseString(natResponce.XML, (err, result) => {
                                 if (err) reject(err);
 
@@ -149,8 +152,8 @@ function NAT10002Request(transciever, DVRconnectionID)
 // TODO: reuse UDPAcknowledge from Transciever
 function ack(transciever, ackCommand)
 {
-        const ack = new Cmd24(ackCommand, transciever.connectionID, transciever.connectionID-1);
-        transciever.UDPSendCommand(ack);
+        const ackCmd = new Cmd24(ackCommand, transciever.connectionID, transciever.connectionID-1);
+        transciever.UDPSendCommand(ackCmd);
 }
 
 /**
@@ -168,13 +171,16 @@ export function NATGetDVRIP(NATHost, NATPort)
                 NATHandshake(transciever)
                 // ref: #1993 see doc/conversations/NAT conversation 24122022.xlsm
                 .then(() => NAT10006Request(transciever))
-                .then((res) => resolve({ 
-                        NAT: { host: NATHost, port: NATPort}, 
-                        DVR: { host: res.host, port: res.port }}))
-                .catch((reason) => reject(reason) )
-                .finally(() => {
+                .then((res) => {
                         ack(transciever, Cmd24.Head_NAT);
-                        transciever.close();
+                        resolve({ 
+                                NAT: { host: NATHost, port: NATPort}, 
+                                DVR: { host: res.host, port: res.port }})
+                })
+                .catch((reason) => reject(reason) )
+                .finally(() => { 
+                        ack(transciever, Cmd24.Head_NAT);
+                        transciever.close(); 
                 })
         });
 }
@@ -214,80 +220,72 @@ function* commandNo(startCommandNo)
         while(true) yield cno++;
 }
 
-export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
+export function DVRConnect(DVRHost, DVRPort, connectionID)
 {
-        const NATTransciever = new Transciever(NATHost, NATPort);
-        const DVRTransciever = new Transciever(DVRHost, DVRPort);
+        const transciever = new Transciever(DVRHost, DVRPort, connectionID);
 
-        const clientCmdNo = commandNo(DVRTransciever.connectionID-1);
+        const clientCmdNo = commandNo(transciever.connectionID-1);
 
         // -- step 3 => Channel request [to refactor]
-        const channelRequestConvID = DVRTransciever.connectionID + 4;
-        let channelRequestSeq = DVRTransciever.connectionID + 4;
+        const channelRequestConvID = transciever.connectionID + 4;
+        let channelRequestSeq = transciever.connectionID + 4;
         const taskId = uuidv4();
         const destId = '00000001-0000-0000-0000-000000000000';
         /* 2670 */
         const willRequest_3_1 = new Cmd24(
-                Cmd24.Head_DVR, DVRTransciever.connectionID, ++channelRequestSeq, channelRequestConvID, 0, channelRequestConvID + 1);
+                Cmd24.Head_DVR, transciever.connectionID, ++channelRequestSeq, channelRequestConvID, 0, channelRequestConvID + 1);
         /* 2673 */
         const channelRequest_3_2 = new ChannelRequest(
-                DVRTransciever.connectionID, ++channelRequestSeq, channelRequestConvID, channelRequestSeq + 1, channelRequestSeq + 2,
+                transciever.connectionID, ++channelRequestSeq, channelRequestConvID, channelRequestSeq + 1, channelRequestSeq + 2,
                 0, taskId, destId);
 
         // -- chunk 4 => try to request video feed
-        const videoFeedConvID = DVRTransciever.connectionID + 16;
-        let videoFeedRequestSeq = DVRTransciever.connectionID + 1;
-        const videoFeedResponseConvID = DVRTransciever.connectionID + 32;
+        const videoFeedConvID = transciever.connectionID + 16;
+        let videoFeedRequestSeq = transciever.connectionID + 1;
+        const videoFeedResponseConvID = transciever.connectionID + 32;
         /* 2868 */ 
-        const willRequest_4_1 = new Cmd24(Cmd24.Head_DVR, DVRTransciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, 0, videoFeedConvID);
+        const willRequest_4_1 = new Cmd24(Cmd24.Head_DVR, transciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, 0, videoFeedConvID);
         /* 2873 */
         const videoFeedRequest_4_2 = new VideoFeedRequest(
-                DVRTransciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID, videoFeedConvID,
+                transciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID, videoFeedConvID,
                 taskId, destId);
         /* 2874 */
-        const qnei_4_3 = new QueryNodeEncodeInfo(DVRTransciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID + 1, videoFeedConvID);
+        const qnei_4_3 = new QueryNodeEncodeInfo(transciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID + 1, videoFeedConvID);
 
         return new Promise((resolve, reject) => {
-                // should be another socket that will stay open to continue DVR conversation (???? review comment)
-                console.group('NAT conversation');
-                NATHandshake(NATTransciever)
-                .then(() => NAT10002Request(NATTransciever))
-                .then(() => ack(NATTransciever, Cmd24.Head_NAT))
-                .then(() => console.groupEnd())
-
-                .then(() => console.group('DVR conversation'))
+                console.group('DVR conversation');
                  
                 // --> 1. DVR handshake see doc/conversations/DVR conversation 24122022.xlsm 2453-2508
-                .then(() => { return new Promise((resolve, reject) => {
+                new Promise((resolve, reject) => {
                         console.group('Handshake');
 
                         const cmdNo = clientCmdNo.next().value;
                         const cmd28_1 = new Cmd28(Cmd28.Head_DVR, 
-                                DVRTransciever.connectionID, 0, 0, DVRTransciever.connectionID, 0);
+                                transciever.connectionID, 0, 0, transciever.connectionID, 0);
                         const cmd28_2 = new Cmd28(Cmd28.Head_DVR, 
-                                DVRTransciever.connectionID, cmdNo, 0, DVRTransciever.connectionID, 
-                                DVRTransciever.connectionID);
+                                transciever.connectionID, cmdNo, 0, transciever.connectionID, 
+                                transciever.connectionID);
                         const cmd28_3 = new Cmd28(Cmd28.Head_DVR, 
-                                DVRTransciever.connectionID, cmdNo, DVRTransciever.connectionID - 1, 
-                                DVRTransciever.connectionID, DVRTransciever.connectionID + 1);
+                                transciever.connectionID, cmdNo, transciever.connectionID - 1, 
+                                transciever.connectionID, transciever.connectionID + 1);
 
-                        DVRTransciever.UDPSendCommandGetResponce(cmd28_1, (msg) => cmd28(msg))
-                        .then(() => DVRTransciever.UDPSendCommandGetResponce(cmd28_2, (msg) => cmd28(msg)))
-                        .then(() => DVRTransciever.UDPSendCommandGetResponce(cmd28_3, (msg) => cmd28(msg)))
+                        transciever.UDPSendCommandGetResponce(cmd28_1, (msg) => cmd28(msg))
+                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_2, (msg) => cmd28(msg)))
+                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_3, (msg) => cmd28(msg)))
                         // -- Receive Cmd88
-                        .then(() => DVRTransciever.UDPReceiveSPBuffer())
+                        .then(() => transciever.UDPReceiveSPBuffer())
                         .then(() => resolve())
                         .finally(() => console.groupEnd())
-                })})
+                })
 
                 // --> 2. DRAuth
                 .then(() => { return new Promise((resolve, reject) => {
                         console.group('DRAuth');
-                        const auth_2 = new DVRAuth(DVRTransciever.connectionID, clientCmdNo.next().value, 
-                                DVRTransciever.connectionID, DVRTransciever.connectionID + 1, DVRTransciever.connectionID + 1);
+                        const auth_2 = new DVRAuth(transciever.connectionID, clientCmdNo.next().value, 
+                                transciever.connectionID, transciever.connectionID + 1, transciever.connectionID + 1);
 
-                        DVRTransciever.UDPSendCommandGetResponce(auth_2, (msg) => cmd24(msg))
-                        .then(() => DVRTransciever.UDPReceiveMPBuffer() )
+                        transciever.UDPSendCommandGetResponce(auth_2, (msg) => cmd24(msg))
+                        .then(() => transciever.UDPReceiveMPBuffer() )
                         .then(() => resolve())
                         .finally(() => console.groupEnd())
                 })})
@@ -305,7 +303,7 @@ export function DVRConnect(NATHost, NATPort, DVRHost, DVRPort)
                 // })
 
                 .then(() => resolve() )
-                .finally(() => DVRTransciever.close() )
+                .finally(() => transciever.close() )
         });
 }
 

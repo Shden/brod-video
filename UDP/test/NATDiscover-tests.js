@@ -1,5 +1,5 @@
 import * as should from 'should';
-import { GetNATAndDVRAddresses, NATRegisterConnection } from "../../networking.js";
+import { GetNATAndDVRAddresses, NATRegisterConnection, DVRConnect } from "../../networking.js";
 
 describe('NAT Discovery tests', function() {
 
@@ -8,7 +8,7 @@ describe('NAT Discovery tests', function() {
 
         before('Preparation', () => {
                 // Suppress console log
-                console.log = function() {};
+                console.log = () => {};
         });
 
         after('Tear down', () => {
@@ -16,28 +16,45 @@ describe('NAT Discovery tests', function() {
         })
 
         it('Can get NAT and DVR IP addresses', (done) => {
-                GetNATAndDVRAddresses().then((res) => {
-                        res.should.have.property('DVR');
-                        res.DVR.should.have.property('host');
-                        res.DVR.should.have.property('port');
-                        res.should.have.property('NAT');
-                        res.NAT.should.have.property('host');
-                        res.NAT.should.have.property('port');
+                GetNATAndDVRAddresses().then((addr) => {
+                        addr.should.have.property('DVR');
+                        addr.DVR.should.have.property('host');
+                        addr.DVR.should.have.property('port');
+                        addr.should.have.property('NAT');
+                        addr.NAT.should.have.property('host');
+                        addr.NAT.should.have.property('port');
                         done();
                 });
         });
 
         it('Can register DVR connection ID', (done) => {
-                const CONN_ID = 2345678;
+                const CONN_ID = new Date().valueOf() & 0x7FFFFFFF;
 
-                GetNATAndDVRAddresses().
-                then((res) => setTimeout(() => {
+                GetNATAndDVRAddresses()
+                .then((addr) => {
                         // console.log = consoleLog;
-                        NATRegisterConnection(res.NAT.host, res.NAT.port, CONN_ID)
-                        .then((r) => {
-                                r.should.be.equal(CONN_ID);
+                        NATRegisterConnection(addr.NAT.host, addr.NAT.port, CONN_ID)
+                        .then((connID) => {
+                                connID.should.be.equal(CONN_ID);
                                 done();
                         });
-                }, 3000));                
+                });                
+        });
+
+        it.skip('quick test NATRegisterConnection', (done) => {
+
+                console.log = consoleLog;
+                NATRegisterConnection('47.91.72.135', 8989, 4444444).then(() => done());
+        });
+
+        it.skip('DVR conversation', (done) => {
+                const DVRconnectionID = new Date().valueOf() & 0x7FFFFFFF;
+
+                GetNATAndDVRAddresses()
+                .then((addr) => {
+                        NATRegisterConnection(addr.NAT.host, addr.NAT.port, DVRconnectionID)
+                        .then((connID) => { console.log = consoleLog; DVRConnect(addr.DVR.host, addr.DVR.port, connID); })
+                        .then(() => done());
+                });
         });
 });

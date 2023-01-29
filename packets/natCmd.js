@@ -17,17 +17,17 @@
 <<<<<<
 */
 
-import { Cmd28 } from "../cmd28.js";
+import { Cmd28 } from "./cmd28.js";
 
 // NATReq data structure 
-export class NATReq extends Cmd28 
+export class NATCmd extends Cmd28 
 {
-        static get NATReqCmd() { return 0x00010102; }
+        static get CmdID() { return 0x00010102; }
         static get Tail() { return 0x0100; }
 
         constructor(connectionID, data1, data2, data3, data4, xml)
         {
-                super(NATReq.NATReqCmd, connectionID, data1, data2, data3, data4, NATReq.Tail);
+                super(NATCmd.CmdID, connectionID, data1, data2, data3, data4, NATCmd.Tail);
                 this.XMLLength = xml.length + 1;
                 this.XML = xml;
         }
@@ -42,7 +42,7 @@ export class NATReq extends Cmd28
 
         static deserialize(buffer)
         {
-                if (buffer.readUInt32LE(0 * 4) != NATReq.NATReqCmd && buffer.readUInt32LE(0 * 4) != NATReq.NATRespCmd)
+                if (buffer.readUInt32LE(0 * 4) != NATCmd.CmdID && buffer.readUInt32LE(0 * 4) != NATCmd.NATRespCmd)
                         raise('Not NATReq command, unable to deserialize.');
         
                 // TODO: Refactor to return instance of NATReq instead of Cmd28 (see BinPayload)

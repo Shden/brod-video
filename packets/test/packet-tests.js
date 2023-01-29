@@ -1,11 +1,11 @@
 import { Cmd28 } from '../cmd28.js';
 import { Cmd24 } from '../cmd24.js';
-import { NATReq } from '../NAT/natReq.js';
-import { BinPayload } from '../binPayload.js';
-import { DVRAuth } from '../binPayload.js';
-import { QuerySystemCaps } from '../binPayload.js';
-import { ChannelRequest } from '../binPayload.js';
-import { VideoFeedRequest } from '../binPayload.js';
+import { NATCmd } from '../natCmd.js';
+import { DVRCmd } from '../dvrCmd.js';
+import { DVRAuth } from '../dvrCmd.js';
+import { QuerySystemCaps } from '../dvrCmd.js';
+import { ChannelRequest } from '../dvrCmd.js';
+import { VideoFeedRequest } from '../dvrCmd.js';
 import * as should from 'should';
 
 const TEST_ID = 0x1F2E3D4C;
@@ -70,26 +70,26 @@ describe('NATReq packet tests:', () => {
 
         it('Serialization', () => {
 
-                const packet = new NATReq(TEST_ID, TEST_ID+1, TEST_ID+2, TEST_ID+3, TEST_ID+4, TEST_XML);
+                const packet = new NATCmd(TEST_ID, TEST_ID+1, TEST_ID+2, TEST_ID+3, TEST_ID+4, TEST_XML);
                 const buffer = packet.serialize(packet);
                 const packetHeadAsInt32Array = new Int32Array(buffer.buffer, buffer.byteOffset, 8);
                 const packetTailAsString = buffer.toString("ascii", 32, buffer.length-1);
 
-                packetHeadAsInt32Array[0].should.be.equal(NATReq.NATReqCmd);  
+                packetHeadAsInt32Array[0].should.be.equal(NATCmd.CmdID);  
                 packetHeadAsInt32Array[1].should.be.equal(TEST_ID);
                 packetHeadAsInt32Array[2].should.be.equal(TEST_ID+1);
                 packetHeadAsInt32Array[3].should.be.equal(TEST_ID+2);
                 packetHeadAsInt32Array[4].should.be.equal(TEST_ID+3);
                 packetHeadAsInt32Array[5].should.be.equal(TEST_ID+4);
-                packetHeadAsInt32Array[6].should.be.equal(NATReq.Tail);
+                packetHeadAsInt32Array[6].should.be.equal(NATCmd.Tail);
                 packetHeadAsInt32Array[7].should.be.equal(TEST_XML.length + 1);
                 packetTailAsString.should.be.String().and.is.equal(TEST_XML);
         });
 
         it('Deserialization', () => {
 
-                const natToSerialize = new NATReq(TEST_ID, TEST_ID+1, TEST_ID+2, TEST_ID+3, TEST_ID+4, TEST_XML);
-                const deserializedNat = NATReq.deserialize(natToSerialize.serialize());
+                const natToSerialize = new NATCmd(TEST_ID, TEST_ID+1, TEST_ID+2, TEST_ID+3, TEST_ID+4, TEST_XML);
+                const deserializedNat = NATCmd.deserialize(natToSerialize.serialize());
 
                 deserializedNat.ConnectionID.should.be.equal(natToSerialize.ConnectionID);
                 deserializedNat.Data1.should.be.equal(natToSerialize.Data1);
@@ -116,7 +116,7 @@ describe('BinPayload packet tests:', () => {
                 const paramsBase = randomInt32();
                 const params = Array.from({ length: 6 }, (value, index) => paramsBase + index);
                 const range0_FF = Uint8Array.from({ length: BUFFER_SIZE }, (value, index) => index);
-                const packet = new BinPayload(...params, new Buffer.from(range0_FF));
+                const packet = new DVRCmd(...params, new Buffer.from(range0_FF));
                 const buffer = packet.serialize();
 
                 for (let i = 0; i < 6; i++)                
@@ -132,8 +132,8 @@ describe('BinPayload packet tests:', () => {
                 const paramsBase = randomInt32();
                 const params = Array.from({ length: 6 }, (value, index) => paramsBase + index);
                 const range0_FF = Uint8Array.from({ length: BUFFER_SIZE }, (value, index) => index);
-                const packetToSerialize = new BinPayload(...params, new Buffer.from(range0_FF));
-                const deserializedPacket = BinPayload.deserialize(packetToSerialize.serialize());
+                const packetToSerialize = new DVRCmd(...params, new Buffer.from(range0_FF));
+                const deserializedPacket = DVRCmd.deserialize(packetToSerialize.serialize());
 
                 deserializedPacket.CmdHead.should.be.equal(packetToSerialize.CmdHead);
                 deserializedPacket.ConnectionID.should.be.equal(packetToSerialize.ConnectionID);
@@ -158,7 +158,7 @@ describe('DVRAuth packet tests:', () => {
                 const packet = new DVRAuth(...params, attachedBuffer);
                 const serializedBuffer = packet.serialize();
 
-                serializedBuffer.readUInt32LE(0 * 4).should.be.equal(DVRAuth.Head);
+                serializedBuffer.readUInt32LE(0 * 4).should.be.equal(DVRAuth.CmdID);
                 for (let i = 1; i < 6; i++)                
                         serializedBuffer.readUInt32LE(i * 4).should.be.equal(params[i-1]);
 
@@ -179,7 +179,7 @@ describe('QuerySystemCaps packet tests:', () => {
                 const packet = new QuerySystemCaps(...params, attachedBuffer);
                 const serializedBuffer = packet.serialize();
 
-                serializedBuffer.readUInt32LE(0 * 4).should.be.equal(QuerySystemCaps.Head);
+                serializedBuffer.readUInt32LE(0 * 4).should.be.equal(QuerySystemCaps.CmdID);
                 for (let i = 1; i < 6; i++)                
                         serializedBuffer.readUInt32LE(i * 4).should.be.equal(params[i-1]);
 

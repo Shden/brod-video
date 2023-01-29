@@ -1,11 +1,11 @@
 // NAT point conversation snapshot analysis: see doc/conversations/NAT conversation 24122022.xlsx
 import { Cmd28 } from './packets/cmd28.js';
-import { NATReq } from './packets/NAT/natReq.js';
+import { NATCmd } from './packets/natCmd.js';
 import { Cmd24 } from './packets/cmd24.js';
-import { BinPayload, ChannelRequest, Cmd88, DVRAuth } from "./packets/binPayload.js";
+import { DVRCmd, ChannelRequest, Cmd88, DVRAuth } from "./packets/dvrCmd.js";
 import { serialNumber } from './privateData.js';
-import { VideoFeedRequest } from "./packets/binPayload.js";
-import { QueryNodeEncodeInfo } from "./packets/binPayload.js";
+import { VideoFeedRequest } from "./packets/dvrCmd.js";
+import { QueryNodeEncodeInfo } from "./packets/dvrCmd.js";
 import xml2js from "xml2js";
 import { v4 as uuidv4 } from 'uuid';
 import { Transciever } from "./UDP/transciever.js";
@@ -90,12 +90,12 @@ function NAT10006Request(transciever)
 
         return new Promise((resolve, reject) => {
         
-                const NATRequest = new NATReq(transciever.connectionID, transciever.connectionID, 
+                const NATRequest = new NATCmd(transciever.connectionID, transciever.connectionID, 
                         transciever.connectionID, transciever.connectionID + 1, transciever.connectionID + 1, 
                         NAT10006XMLRequest);
-                transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATReq.NATReqCmd))
+                transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATCmd.CmdID))
                 .then((msg) => {
-                        const natResponce = NATReq.deserialize(msg);
+                        const natResponce = NATCmd.deserialize(msg);
                         transciever.UDPAcknowledge(natResponce);
                         xml2js.parseString(natResponce.XML, (err, result) => {
                                 if (err) reject(err);
@@ -127,13 +127,13 @@ function NAT10002Request(transciever, DVRconnectionID)
 
         return new Promise((resolve, reject) => {
                 // send NAT request. See doc/conversations/NAT conversation 24122022.xlsm packet ref 1993
-                const NATRequest = new NATReq(transciever.connectionID, transciever.connectionID, 
+                const NATRequest = new NATCmd(transciever.connectionID, transciever.connectionID, 
                         transciever.connectionID - 1, transciever.connectionID + 1, transciever.connectionID, 
                         NAT10002XMLRequest);
 
-                transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATReq.NATReqCmd))
+                transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATCmd.CmdID))
                 .then((msg) => {
-                        const natResponce = NATReq.deserialize(msg);
+                        const natResponce = NATCmd.deserialize(msg);
                         transciever.UDPAcknowledge(natResponce);
                         xml2js.parseString(natResponce.XML, (err, result) => {
                                 if (err) reject(err);

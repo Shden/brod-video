@@ -1,4 +1,4 @@
-import { BinPayload } from "../packets/binPayload.js";
+import { DVRCmd } from "../packets/dvrCmd.js";
 
 export class UDPLinearizer extends Array
 {

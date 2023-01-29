@@ -2,9 +2,9 @@
 import { Cmd24 } from "./cmd24.js";
 import { DvrUserName, DvrUserPass } from "../privateData.js";
 
-export class BinPayload extends Cmd24 {
+export class DVRCmd extends Cmd24 {
 
-        static get Head() { return 0x00010101; }
+        static get CmdID() { return 0x00010101; }
 
         constructor(head, connectionID, data1, data2, data3, data4, payload)
         {
@@ -25,7 +25,7 @@ export class BinPayload extends Cmd24 {
                 const payload = Buffer.allocUnsafe(buffer.length - CMD24_LEN);
                 buffer.copy(payload, 0, CMD24_LEN, buffer.length);
         
-                return new BinPayload(cmd24.CmdHead, cmd24.ConnectionID, cmd24.Data1, cmd24.Data2,
+                return new DVRCmd(cmd24.CmdHead, cmd24.ConnectionID, cmd24.Data1, cmd24.Data2,
                         cmd24.Data3, cmd24.Data4, payload);
         }
         
@@ -58,14 +58,14 @@ export class Cmd88
 // 00f0   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   ................
 // 0100   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   ................
 // 0110   00 00 00 00 00 00 00 00 00 00 00 00               ............
-export class DVRAuth extends BinPayload
+export class DVRAuth extends DVRCmd
 {
         // Raw request without 24 bytes of cmd24 header
         static get Raw() { return `31313131fc000000030000010101000000000000ec000000030000000000000000000000000000000000000000000000000000000000000000000000${DvrUserName}0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000${DvrUserPass}00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a79506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000`; }
 
         constructor(connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo)
         {
-                super(DVRAuth.Head, connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo);
+                super(DVRAuth.CmdID, connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo);
                 this.payload = Buffer.from(DVRAuth.Raw, "hex");
         }
 
@@ -143,14 +143,14 @@ export class DVRAuth extends BinPayload
 // 	</content>
 // </response>
 
-export class QuerySystemCaps extends BinPayload
+export class QuerySystemCaps extends DVRCmd
 {
         // Raw request without 24 bytes of cmd24 header
         static get Raw() { return '3131313118010000030000011b090000010000000801000061646d696e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000717565727953797374656d43617073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003c3f786d6c2076657273696f6e3d27312e302720656e636f64696e673d277574662d38273f3e3c726571756573742076657273696f6e3d27312e30272073797374656d547970653d274e564d532d393030302720636c69656e74547970653d274d4f42494c45272075726c3d27717565727953797374656d43617073273e3c2f726571756573743e'; }
 
         constructor(id, data1, data2, data3, data4)
         {
-                super(QuerySystemCaps.Head, id, data1, data2, data3, data4);
+                super(QuerySystemCaps.CmdID, id, data1, data2, data3, data4);
                 this.payload = Buffer.from(QuerySystemCaps.Raw, "hex");
         }
 }
@@ -193,11 +193,11 @@ export class QuerySystemCaps extends BinPayload
 //         <audio>0</audio>
 //         <streamType>2</streamType>
 // </request>
-export class ChannelRequest extends BinPayload
+export class ChannelRequest extends DVRCmd
 {
         constructor(connID, seq, convID, data3, data4, chNo, taskId, destID)
         {
-                super(ChannelRequest.Head, connID, seq, convID, data3, data4, ChannelRequest.Tail);
+                super(ChannelRequest.CmdID, connID, seq, convID, data3, data4, ChannelRequest.Tail);
 
                 // binary part between cmd24 and xml
                 const rawBin = '313131316d01000003000201050500000200000015010000facef55bd2eb4702bddd5ad5dc37e94a7d5d64aa742e4f53b7643e69908f57db0200000000000000000000000000000002000000d8cd876198b2477285273992f7a2c5df01000000';
@@ -475,11 +475,11 @@ export class ChannelRequest extends BinPayload
 //                 </item>
 //         </transportContent>
 // </request>
-export class VideoFeedRequest extends BinPayload
+export class VideoFeedRequest extends DVRCmd
 {
         constructor(connID, seq, convID, respConvID, data4, taskId, destID)
         {
-                super(VideoFeedRequest.Head, connID, seq, convID, respConvID, data4);
+                super(VideoFeedRequest.CmdID, connID, seq, convID, respConvID, data4);
 
                 // binary part between cmd28 and xml
                 const rawBin = '31313131cc01000003000101060500000f00000088010000ee8220c41dc945568ee9bd3f657ef9927d5d64aa742e4f53b7643e69908f57db0500000000000000000000000000000002000000';
@@ -552,7 +552,7 @@ export class VideoFeedRequest extends BinPayload
 //                 <delayedRecordTimeNote/>
 //         </requireField>
 // </request>
-export class QueryNodeEncodeInfo extends BinPayload
+export class QueryNodeEncodeInfo extends DVRCmd
 {
         // Raw request without 28 bytes of cmd28 header
         static get Raw() { return `1e020000030000011b090000100000000e020000${DvrUserName}000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000071756572794e6f6465456e636f6465496e666f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003c3f786d6c2076657273696f6e3d27312e302720656e636f64696e673d277574662d38273f3e3c726571756573742076657273696f6e3d27312e30272073797374656d547970653d274e564d532d393030302720636c69656e74547970653d274d4f42494c45272075726c3d2771756572794e6f6465456e636f6465496e666f273e3c636f6e646974696f6e3e3c63686c49643e7b30303030303030332d303030302d303030302d303030302d3030303030303030303030307d3c2f63686c49643e3c2f636f6e646974696f6e3e3c726571756972654669656c643e3c6d61696e436170732f3e3c737562436170732f3e3c7375622f3e3c6d6e2f3e3c6d652f3e3c616e2f3e3c61652f3e3c7265632f3e3c6674705265632f3e3c6d61696e53747265616d5175616c6974794e6f74652f3e3c73756253747265616d5175616c6974794e6f74652f3e3c7072655265636f726454696d654e6f74652f3e3c64656c617965645265636f726454696d654e6f74652f3e3c2f726571756972654669656c643e3c2f726571756573743e`; }
@@ -560,7 +560,7 @@ export class QueryNodeEncodeInfo extends BinPayload
 
         constructor(connID, seq, convID, data3, data4)
         {
-                super(QueryNodeEncodeInfo.Head, connID, seq, convID, data3, data4, QueryNodeEncodeInfo.Tail);
+                super(QueryNodeEncodeInfo.CmdID, connID, seq, convID, data3, data4, QueryNodeEncodeInfo.Tail);
                 this.payload = Buffer.from(QueryNodeEncodeInfo.Raw, "hex");
         }
 

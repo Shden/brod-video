@@ -1,5 +1,5 @@
 import { UDPLinearizer } from "./linearizer.js";
-import { BinPayload } from "../packets/binPayload.js";
+import { DVRCmd } from "../packets/dvrCmd.js";
 import { Cmd24 } from "../packets/cmd24.js";
 import { LogReceivedMessage, LogSentMessage } from "./logger.js";
 import udp from "dgram";
@@ -14,6 +14,8 @@ export class Transciever
         {
                 this.socket = udp.createSocket('udp4');
                 this.connectionID = (connectionID) ? connectionID : new Date().valueOf() & 0x7FFFFFFF;
+                this.lastSentCommandNumber = this.connectionID - 1;
+                this.lastReceivedCommandNumber = this.connectionID - 1;
         }
 
         /**
@@ -60,7 +62,7 @@ export class Transciever
                                         LogReceivedMessage(msg, info);
                                         console.groupEnd();
                 
-                                        const binPayload = BinPayload.deserialize(msg);
+                                        const binPayload = DVRCmd.deserialize(msg);
                                         linearizer.push(binPayload);
                 
                                         if (linearizer.isComplete) 
@@ -116,7 +118,7 @@ export class Transciever
                                 LogReceivedMessage(msg, info);
                                 console.groupEnd();
 
-                                const cmd = BinPayload.deserialize(msg); // Cmd24
+                                const cmd = DVRCmd.deserialize(msg); // Cmd24
                                 this.UDPAcknowledge(cmd);
 
                                 this.socket.off('message', HandleReceivedBuffer)
@@ -133,11 +135,12 @@ export class Transciever
         }
  
         /**
-         * Send command and forget.
+         * Send command, no confirmation required.
          * @param {*} command command to send
          */
         UDPSendCommand(command)
         {
+                // >>> TODO: command stamping logic goes here <<<
                 const msg = Buffer.from(command.serialize());
                 this.socket.send(msg);
                 LogSentMessage(msg, this.host, this.port);

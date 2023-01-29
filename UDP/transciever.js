@@ -1,7 +1,6 @@
 import { UDPLinearizer } from "./linearizer.js";
 import { BinPayload } from "../packets/binPayload.js";
 import { Cmd24 } from "../packets/cmd24.js";
-import { Cmd28 } from "../packets/cmd28.js";
 import { LogReceivedMessage, LogSentMessage } from "./logger.js";
 import udp from "dgram";
 
@@ -9,22 +8,34 @@ export class Transciever
 {
         /**
          * Create instance of transciever to communicate to provided host/port.
-         * @param {String} host server address
-         * @param {Number} port server port
          * @param {Number} connectionID
          */
-        constructor(host, port, connectionID = 0)
+        constructor(connectionID = 0)
+        {
+                this.socket = udp.createSocket('udp4');
+                this.connectionID = (connectionID) ? connectionID : new Date().valueOf() & 0x7FFFFFFF;
+        }
+
+        /**
+         * Connects tranciever to remote address and port.
+         * @param {String} host server address
+         * @param {Number} port server port
+         * @returns 
+         */
+        connect(host, port)
         {
                 this.host = host;
                 this.port = port;
-                this.socket = udp.createSocket('udp4');
-                this.socket.on('error', (err) => console.log(err));
-                this.socket.connect(port, host);
-                this.connectionID = (connectionID) ? connectionID : new Date().valueOf() & 0x7FFFFFFF;
+                return new Promise((resolve, reject) => {
+                        this.socket.once('error', (err) => reject(err));
+                        this.socket.once('connect', () => resolve());
+                        this.socket.connect(port, host);
+                });
         }
 
         close()
         {
+                this.socket.disconnect();
                 this.socket.close();
         }
 
@@ -128,7 +139,7 @@ export class Transciever
         UDPSendCommand(command)
         {
                 const msg = Buffer.from(command.serialize());
-                this.socket.send(msg, this.port, this.host);
+                this.socket.send(msg);
                 LogSentMessage(msg, this.host, this.port);
         }
   

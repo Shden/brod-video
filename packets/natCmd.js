@@ -25,9 +25,9 @@ export class NATCmd extends Cmd28
         static get CmdID() { return 0x00010102; }
         static get Tail() { return 0x0100; }
 
-        constructor(connectionID, data1, data2, data3, data4, xml)
+        constructor(xml)
         {
-                super(NATCmd.CmdID, connectionID, data1, data2, data3, data4, NATCmd.Tail);
+                super(NATCmd.CmdID, 0, 0, 0, 0, 0, NATCmd.Tail);
                 this.XMLLength = xml.length + 1;
                 this.XML = xml;
         }

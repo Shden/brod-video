@@ -3,6 +3,7 @@ import { DVRCmd } from "../packets/dvrCmd.js";
 import { Cmd24 } from "../packets/cmd24.js";
 import { LogReceivedMessage, LogSentMessage } from "./logger.js";
 import udp from "dgram";
+import { NATCmd } from "../packets/natCmd.js";
 
 export class Transciever
 {
@@ -14,7 +15,7 @@ export class Transciever
         {
                 this.socket = udp.createSocket('udp4');
                 this.connectionID = (connectionID) ? connectionID : new Date().valueOf() & 0x7FFFFFFF;
-                this.lastSentCommandNumber = this.connectionID - 1;
+                this.lastSentCommandNumber = this.connectionID;
                 this.lastReceivedCommandNumber = this.connectionID - 1;
         }
 
@@ -63,6 +64,10 @@ export class Transciever
                                         console.groupEnd();
                 
                                         const binPayload = DVRCmd.deserialize(msg);
+
+                                        binPayload.decodeSegments();
+                                        binPayload.printSegments();
+                                        
                                         linearizer.push(binPayload);
                 
                                         if (linearizer.isComplete) 
@@ -91,6 +96,10 @@ export class Transciever
                 });
         }
 
+        // 13	3.249351	45.137.113.118	192.168.2.11	UDP	51892 → 49149 Len=1272	01010100 5898d27e 5998d27e 5898d27e 5a98d27e 5998d27e 313131316c00000006000000…
+        // 14	3.349264	45.137.113.118	192.168.2.11	UDP	51892 → 49149 Len=740	01010100 5898d27e 5a98d27e 5898d27e 5b98d27e 5998d27e d02c968c2c56c802108e7a00…
+        // 15	3.351717	192.168.2.11	45.137.113.118	UDP	49149 → 51892 Len=24	01020100 5898d27e 5898d27e 5998d27e 00000000 5a98d27e
+        // 16	3.352109	192.168.2.11	45.137.113.118	UDP	49149 → 51892 Len=24	01020100 5898d27e 5898d27e 5a98d27e 00000000 5b98d27e        
         /**
          * Acknowledge single payload received.
          * @param {Object} cmd to acknowledge.
@@ -100,6 +109,7 @@ export class Transciever
                 const clientAck = new Cmd24(Cmd24.Head_DVR, cmd.ConnectionID, cmd.Data2, cmd.Data1, 0, cmd.Data3);
                 console.group('Acknowledgement');
                 this.UDPSendCommand(clientAck);
+                this.lastReceivedCommandNumber = cmd.Data1;
                 console.groupEnd();
         }
 
@@ -140,7 +150,16 @@ export class Transciever
          */
         UDPSendCommand(command)
         {
-                // >>> TODO: command stamping logic goes here <<<
+                // DVR and NAT command stamping logic
+                if (command.CmdHead == DVRCmd.CmdID || command.CmdHead == NATCmd.CmdID)
+                {
+                        command.Data1 = this.lastSentCommandNumber;             // this command sequential number
+                        command.Data2 = this.lastReceivedCommandNumber;         // last recieved command number
+                        command.Data3 = this.lastSentCommandNumber + 1;         // next command will go with number
+                        command.Data4 = this.lastReceivedCommandNumber + 1;     // expect next command to receive with number
+                        this.lastSentCommandNumber++;
+                }
+                command.ConnectionID = this.connectionID;
                 const msg = Buffer.from(command.serialize());
                 this.socket.send(msg);
                 LogSentMessage(msg, this.host, this.port);

@@ -4,23 +4,26 @@ export class UDPLinearizer extends Array
 {
         get isComplete()
         {
-                const SEGMENT_HEADER = 0x31313131;
-
                 // make sure packets are in sequence order
                 this.sort((a, b) => a.Data1 - b.Data1);
 
                 const buffer = this.combinedBuffer;
-                if (buffer.length == 0) return false;
+                const cmd = new DVRCmd(DVRCmd.Head_DVR, 0, 0, 0, 0, 0, buffer);
+                cmd.decodeSegments();
 
-                let offset = 0;
-                do {
-                        if (buffer.readUInt32LE(offset) !== SEGMENT_HEADER) return false;
-                        offset += buffer.readUInt32LE(offset + 4) + 8;
-                        if (offset > buffer.length) return false;
+                return !cmd.hasNextBlock;
+                // if (buffer.length == 0) return false;
+
+                // let offset = 0;
+                // do {
+                //         if (buffer.readUInt32LE(offset) !== DVRCmd.DATA_SEGMENT_HEADER) return false;
+                //         // console.log(buffer.toString('hex', offset, offset + buffer.readUInt32LE(offset + 4) + 8));
+                //         offset += buffer.readUInt32LE(offset + 4) + 8;
+                //         if (offset > buffer.length) return false;
                         
-                } while (offset + 4 < buffer.length);
+                // } while (offset + 4 < buffer.length);
 
-                return true;
+                // return true;
         }
 
         // reduce to a single buffer

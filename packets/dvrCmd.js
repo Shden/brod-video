@@ -5,6 +5,7 @@ import { DvrUserName, DvrUserPass } from "../privateData.js";
 export class DVRCmd extends Cmd24 {
 
         static get CmdID() { return 0x00010101; }
+        static get DATA_SEGMENT_HEADER() { return 0x31313131; }
 
         constructor(head, connectionID, data1, data2, data3, data4, payload)
         {
@@ -27,6 +28,58 @@ export class DVRCmd extends Cmd24 {
         
                 return new DVRCmd(cmd24.CmdHead, cmd24.ConnectionID, cmd24.Data1, cmd24.Data2,
                         cmd24.Data3, cmd24.Data4, payload);
+        }
+
+        printSegments()
+        {
+                console.log(' Header  Segment length ?????? ??');
+                console.log('------------------------------------------------------------------------------------------------------------------------------------------');
+
+                this.segments.forEach(segment => { 
+                        let segData = this.payload.subarray(segment.start, segment.end)
+                        console.log(//"%i %d %d\t%s",
+                                // segData.readUInt32LE(4).toString().padStart(4), 
+                                // segData.readUInt16LE(8),
+                                // segData.readUInt8(11), 
+                                segData.toString('hex', 0, 4),
+                                segData.toString('hex', 4, 8), ('(' + segData.readUInt32LE(4).toString() + ')').padStart(5),
+                                segData.toString('hex', 8, 11),
+                                segData.toString('hex', 11, 12),
+                                segData.toString('hex', 12)
+                        ) 
+                });
+                console.log('hasNextBlock:', this.hasNextBlock);
+        }
+
+        get hasNextBlock()
+        {
+                if (this.segments.length)
+                {
+                        let lastSeg = this.segments[this.segments.length-1];
+                        if (lastSeg.end > this.payload.length) 
+                                return true;
+                        let lastSegData = this.payload.subarray(lastSeg.start, lastSeg.end);
+                        let markerByte = lastSegData.readUInt8(11);
+                        return markerByte == 1;
+                }
+                return false;
+        }
+
+        decodeSegments()
+        {
+                this.segments = new Array();
+                /**
+                 * Each segment includes:
+                 * 4 bytes: DATA_SEGMENT_HEADER segment marker
+                 * 4 bytes: segment data length
+                 */
+                let offset = 0;
+                while (offset + 4 < this.payload.length && this.payload.readUInt32LE(offset) == DVRCmd.DATA_SEGMENT_HEADER)
+                {
+                        let segLength = this.payload.readUInt32LE(offset + 4);
+                        this.segments.push({ start: offset, end: offset + segLength + 8});
+                        offset += segLength + 8;
+                }
         }
         
 }
@@ -63,7 +116,7 @@ export class DVRAuth extends DVRCmd
         // Raw request without 24 bytes of cmd24 header
         static get Raw() { return `31313131fc000000030000010101000000000000ec000000030000000000000000000000000000000000000000000000000000000000000000000000${DvrUserName}0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000${DvrUserPass}00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a79506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000`; }
 
-        constructor(connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo)
+        constructor(connectionID = 0, cmdNo = 0, lastReceivedCmdNo = 0, nextCmdNo = 0, awaitNextCmdNo = 0)
         {
                 super(DVRAuth.CmdID, connectionID, cmdNo, lastReceivedCmdNo, nextCmdNo, awaitNextCmdNo);
                 this.payload = Buffer.from(DVRAuth.Raw, "hex");

@@ -248,9 +248,9 @@ export class QuerySystemCaps extends DVRCmd
 // </request>
 export class ChannelRequest extends DVRCmd
 {
-        constructor(connID, seq, convID, data3, data4, chNo, taskId, destID)
+        constructor(chNo, taskId, destID)
         {
-                super(ChannelRequest.CmdID, connID, seq, convID, data3, data4, ChannelRequest.Tail);
+                super(ChannelRequest.CmdID, 0, 0, 0, 0, 0, ChannelRequest.Tail);
 
                 // binary part between cmd24 and xml
                 const rawBin = '313131316d01000003000201050500000200000015010000facef55bd2eb4702bddd5ad5dc37e94a7d5d64aa742e4f53b7643e69908f57db0200000000000000000000000000000002000000d8cd876198b2477285273992f7a2c5df01000000';

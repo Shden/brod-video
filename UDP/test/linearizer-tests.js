@@ -22,7 +22,7 @@ describe('UDPLinearizer', () => {
                 l.push(packet2);
                 l.push(packet1);
 
-                l.isComplete.should.be.true();
+                l.isComplete.should.be.True;
         });
 
         it('1 packet is an incomplete sequence', () => {
@@ -33,7 +33,16 @@ describe('UDPLinearizer', () => {
 
                 l.push(packet1);
 
-                l.isComplete.should.be.false();
+                l.isComplete.should.be.False;
 
         });
+
+        // it('quick test', () => {
+        //         const p = '010101008bb48b048cb48b048eb48b048db48b048fb48b043131313118010000030000011b090000010000000801000061646d696e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000717565727953797374656d43617073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003c3f786d6c2076657273696f6e3d27312e302720656e636f64696e673d277574662d38273f3e3c726571756573742076657273696f6e3d27312e30272073797374656d547970653d274e564d532d393030302720636c69656e74547970653d274d4f42494c45272075726c3d27717565727953797374656d43617073273e3c2f726571756573743e';
+        //         const l = new UDPLinearizer();
+
+        //         const packet = DVRCmd.deserialize(Buffer.from(p, 'hex'));
+        //         l.push(packet);
+        //         l.isComplete.should.be.True;                
+        // })
 });

@@ -221,11 +221,16 @@ describe('ChannelRequest packet tests:', () => {
         it('Serialization', () => {
 
                 const referenceRawPacket2673 = Buffer.from('01010100b1b29405b3b29405b5b29405b4b29405b6b29405313131316d01000003000201050500000200000015010000facef55bd2eb4702bddd5ad5dc37e94a7d5d64aa742e4f53b7643e69908f57db0200000000000000000000000000000002000000d8cd876198b2477285273992f7a2c5df010000003c3f786d6c2076657273696f6e3d27312e302720656e636f64696e673d277574662d38273f3e3c726571756573742076657273696f6e3d27312e30272073797374656d547970653d274e564d532d393030302720636c69656e74547970653d27535953273e3c6465737449643e7b30303030303030322d303030302d303030302d303030302d3030303030303030303030307d3c2f6465737449643e3c7461736b49643e7b36313837434444382d423239382d373234372d383532372d3339393246374132433544467d3c2f7461736b49643e3c63684e6f3e303c2f63684e6f3e3c617564696f3e303c2f617564696f3e3c73747265616d547970653e323c2f73747265616d547970653e3c2f726571756573743e', 'hex');
-                const serializedChannelRequestPacket = new ChannelRequest(
-                        0x0594b2b1, 0x0594b2b3, 0x0594b2b5, 0x0594b2b4, 0x0594b2b6, 
-                        0, '6187CDD8-B298-7247-8527-3992F7A2C5DF', '00000002-0000-0000-0000-000000000000').serialize();
+                
+                const channelRequestPacket = new ChannelRequest(
+                        0, '6187CDD8-B298-7247-8527-3992F7A2C5DF', '00000002-0000-0000-0000-000000000000');
+                channelRequestPacket.ConnectionID = 0x0594b2b1;
+                channelRequestPacket.Data1 = 0x0594b2b3;
+                channelRequestPacket.Data2 = 0x0594b2b5;
+                channelRequestPacket.Data3 = 0x0594b2b4;
+                channelRequestPacket.Data4 = 0x0594b2b6;
 
-                referenceRawPacket2673.equals(serializedChannelRequestPacket).should.be.true();
+                referenceRawPacket2673.equals(channelRequestPacket.serialize()).should.be.true();
         });
 });
 

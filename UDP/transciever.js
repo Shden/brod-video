@@ -1,26 +1,36 @@
 import { UDPLinearizer } from "./linearizer.js";
 import { DVRCmd } from "../packets/dvrCmd.js";
 import { Cmd24 } from "../packets/cmd24.js";
-import { LogReceivedMessage, LogSentMessage } from "./logger.js";
+import { LogLevel, Logger } from "./logger.js";
 import udp from "dgram";
 import { NATCmd } from "../packets/natCmd.js";
+import { Cmd28 } from "../packets/cmd28.js";
+import { EventEmitter } from "node:events";
+
+
+const InboundEvents = {
+        Command: 'command',
+        OutboundQueueDone: 'outbounddone'
+}
 
 export class Transciever
 {
         /**
-         * Create instance of transciever to communicate to provided host/port.
+         * Create an instance of transciever.
          * @param {Number} connectionID
          */
         constructor(connectionID = 0)
         {
                 this.socket = udp.createSocket('udp4');
+                this.logger = new Logger();
+
                 this.connectionID = (connectionID) ? connectionID : new Date().valueOf() & 0x7FFFFFFF;
-                this.lastSentCommandNumber = this.connectionID;
+                this.lastSentCommandNumber = this.connectionID - 1;
                 this.lastReceivedCommandNumber = this.connectionID - 1;
         }
 
         /**
-         * Connects tranciever to remote address and port.
+         * Connect tranciever to remote address and port.
          * @param {String} host server address
          * @param {Number} port server port
          * @returns 
@@ -29,142 +39,165 @@ export class Transciever
         {
                 this.host = host;
                 this.port = port;
+                
                 return new Promise((resolve, reject) => {
                         this.socket.once('error', (err) => reject(err));
                         this.socket.once('connect', () => resolve());
                         this.socket.connect(port, host);
-                });
-        }
 
-        close()
-        {
-                this.socket.disconnect();
-                this.socket.close();
+                        this.inboundCommands = new Map();
+                        this.outboundCommands = new Map();
+
+                        this.inboundEvents = new EventEmitter();
+
+                        this.socket.on('message', (msg, rinfo) => {
+                                if (rinfo.address == this.host && rinfo.port == this.port)
+                                {
+                                        this.logger.LogReceivedMessage(msg, rinfo);
+                                        switch(msg.readUInt32LE(0))
+                                        {
+                                                case Cmd24.Head_DVR:
+                                                case Cmd24.Head_NAT:
+                                                        // remove acknowledged command from outbound commands
+                                                        const ack = Cmd24.deserialize(msg);
+                                                        this.outboundCommands.delete(ack.Data2);
+                                                        if (!this.outboundCommands.size)
+                                                                this.inboundEvents.emit(InboundEvents.OutboundQueueDone);
+                                                        break;
+
+                                                case Cmd28.Head_DVR:
+                                                case Cmd28.Head_NAT:
+                                                        const cmd28 = Cmd28.deserialize(msg);
+                                                        this.inboundCommands.set(cmd28.Data1, cmd28);
+                                                        this.inboundEvents.emit(InboundEvents.Command, cmd28);
+                                                        break;
+
+                                                case DVRCmd.CmdID:
+                                                        const dvrCmd = DVRCmd.deserialize(msg);
+                                                        this.inboundCommands.set(dvrCmd.Data1, dvrCmd);
+                                                        this.inboundEvents.emit(InboundEvents.Command, dvrCmd);
+                                                        this.UDPAcknowledge(dvrCmd);
+                                                        break;
+
+                                                case NATCmd.CmdID:
+                                                        const natCmd = NATCmd.deserialize(msg);
+                                                        this.inboundCommands.set(natCmd.Data1, natCmd);
+                                                        this.inboundEvents.emit(InboundEvents.Command, natCmd);
+                                                        this.UDPAcknowledge(natCmd);
+                                                        break;
+                                        }
+                                }
+                        });
+                });
         }
 
         /**
-         * Receive multipacket buffer with consistency, completeness and sequence check. 
-         * Send acknowledge command for each successfully received incoming packet.
-         * @returns promise to receive buffer.
+         * Ensure outbound command queue is clear and close socket connection.
+         * @returns 
          */
-        UDPReceiveMPBuffer()
+        close()
         {
-                const MP_BUFFER_RECEIVE_TIMEOUT = 2000;
-
                 return new Promise((resolve, reject) => {
-
-                        let promiseResolved = false;
-                        const linearizer = new UDPLinearizer();
-
-                        const HandleReceivedBuffer = (msg, info) => {
-                                if (!promiseResolved && msg.length > 28) 
-                                {
-                                        console.group('MP buffer received:');
-                                        LogReceivedMessage(msg, info);
-                                        console.groupEnd();
-                
-                                        const binPayload = DVRCmd.deserialize(msg);
-
-                                        binPayload.decodeSegments();
-                                        binPayload.printSegments();
-                                        
-                                        linearizer.push(binPayload);
-                
-                                        if (linearizer.isComplete) 
-                                        {
-                                                promiseResolved = true;
-                
-                                                // acknowledge each received packet
-                                                linearizer.forEach((payload) => {
-                                                        this.UDPAcknowledge(payload);
-                                                });
-                
-                                                this.socket.off('message', HandleReceivedBuffer);
-                                                const combinedBuffer = linearizer.combinedBuffer;
-                                                console.log('%d bytes MP buffer reconstructed.', combinedBuffer.length)
-                                                resolve(combinedBuffer);
-                                        }
-                                }
+                        if (this.outboundCommands.size)
+                        {
+                                this.inboundEvents.once(InboundEvents.OutboundQueueDone, () => {
+                                        this.socket.disconnect();
+                                        this.socket.close();
+                                        resolve();
+                                });
+                                setTimeout(() => reject('Transciever closing timeout'), 2000);
+                        } 
+                        else
+                        {
+                                this.socket.disconnect();
+                                this.socket.close();
+                                resolve();
                         }
-
-                        this.socket.on('message', HandleReceivedBuffer);
-
-                        setTimeout(() => { 
-                                this.socket.off('message', HandleReceivedBuffer);
-                                reject('MP buffer receive timeout'); 
-                        }, MP_BUFFER_RECEIVE_TIMEOUT);
                 });
         }
 
-        // 13	3.249351	45.137.113.118	192.168.2.11	UDP	51892 → 49149 Len=1272	01010100 5898d27e 5998d27e 5898d27e 5a98d27e 5998d27e 313131316c00000006000000…
-        // 14	3.349264	45.137.113.118	192.168.2.11	UDP	51892 → 49149 Len=740	01010100 5898d27e 5a98d27e 5898d27e 5b98d27e 5998d27e d02c968c2c56c802108e7a00…
-        // 15	3.351717	192.168.2.11	45.137.113.118	UDP	49149 → 51892 Len=24	01020100 5898d27e 5898d27e 5998d27e 00000000 5a98d27e
-        // 16	3.352109	192.168.2.11	45.137.113.118	UDP	49149 → 51892 Len=24	01020100 5898d27e 5898d27e 5a98d27e 00000000 5b98d27e        
         /**
          * Acknowledge single payload received.
          * @param {Object} cmd to acknowledge.
          */
         UDPAcknowledge(cmd)
         {
-                const clientAck = new Cmd24(Cmd24.Head_DVR, cmd.ConnectionID, cmd.Data2, cmd.Data1, 0, cmd.Data3);
-                console.group('Acknowledgement');
+                this.lastReceivedCommandNumber = Math.max(this.lastReceivedCommandNumber, cmd.Data1);
+                const commandID = cmd.CmdHead === NATCmd.CmdID ? Cmd24.Head_NAT : Cmd24.Head_DVR;
+                const clientAck = new Cmd24(commandID, cmd.ConnectionID, 
+                        this.lastSentCommandNumber, this.lastReceivedCommandNumber, 0, this.lastReceivedCommandNumber + 1);
                 this.UDPSendCommand(clientAck);
-                this.lastReceivedCommandNumber = cmd.Data1;
-                console.groupEnd();
         }
 
-        /**
-         * Receive single-packet buffer and acknowledge.
-         * @returns promise to receive command.
-         */
-        UDPReceiveSPBuffer()
-        {
-                const SP_BUFFER_RECEIVE_TIMEOUT = 2000;
-
-                return new Promise((resolve, reject) => {
-
-                        const HandleReceivedBuffer = (msg, info) => {
-                                console.group('SP buffer received:');
-                                LogReceivedMessage(msg, info);
-                                console.groupEnd();
-
-                                const cmd = DVRCmd.deserialize(msg); // Cmd24
-                                this.UDPAcknowledge(cmd);
-
-                                this.socket.off('message', HandleReceivedBuffer)
-                                resolve(cmd);
-                        }
-
-                        this.socket.on('message', HandleReceivedBuffer);
-
-                        setTimeout(() => { 
-                                this.socket.off('message', HandleReceivedBuffer);
-                                reject('SP buffer receive timeout'); 
-                        }, SP_BUFFER_RECEIVE_TIMEOUT);
-                });
-        }
- 
         /**
          * Send command, no confirmation required.
          * @param {*} command command to send
          */
         UDPSendCommand(command)
         {
+                command.ConnectionID = this.connectionID;
                 // DVR and NAT command stamping logic
                 if (command.CmdHead == DVRCmd.CmdID || command.CmdHead == NATCmd.CmdID)
                 {
+                        this.lastSentCommandNumber++;
                         command.Data1 = this.lastSentCommandNumber;             // this command sequential number
                         command.Data2 = this.lastReceivedCommandNumber;         // last recieved command number
                         command.Data3 = this.lastSentCommandNumber + 1;         // next command will go with number
                         command.Data4 = this.lastReceivedCommandNumber + 1;     // expect next command to receive with number
-                        this.lastSentCommandNumber++;
+
+                        // TODO add command timestamp and retrieve logic
+                        this.outboundCommands.set(command.Data1, command);      // add to outgoing queue
                 }
-                command.ConnectionID = this.connectionID;
                 const msg = Buffer.from(command.serialize());
                 this.socket.send(msg);
-                LogSentMessage(msg, this.host, this.port);
+                this.logger.LogSentMessage(msg, this.host, this.port);
         }
   
+        /**
+         * Receive multipacket buffer with consistency, completeness and sequence check. 
+         * Send acknowledge command for each successfully received incoming packet.
+         * @returns promise to receive buffer.
+         */
+        UDPReceiveBuffer(responce_validation_rule)
+        {
+                const MP_BUFFER_RECEIVE_TIMEOUT = 2000;
+
+                return new Promise((resolve, reject) => {
+
+                        const linearizer = new UDPLinearizer();
+
+                        const HandleInboundCommand = (cmd) => {
+        
+                                if (responce_validation_rule(cmd)) 
+                                {
+                                        this.inboundCommands.delete(cmd.Data1);
+                                        //cmd.decodeSegments();
+                                        //binPayload.printSegments();
+
+                                        // linearizer.push(cmd);
+                
+                                        // if (linearizer.isComplete) 
+                                        // {
+                                                this.inboundEvents.off(InboundEvents.Command, HandleInboundCommand);
+                                                const combinedBuffer = linearizer.combinedBuffer;
+                                                this.logger.log('%d bytes MP buffer reconstructed.', combinedBuffer.length)
+                                                resolve(cmd/*combinedBuffer*/);
+                                        // }
+                                }
+                        }
+
+                        for (const cmd of this.inboundCommands.values()) 
+                                HandleInboundCommand(cmd)                           
+
+                        this.inboundEvents.on(InboundEvents.Command, HandleInboundCommand);
+
+                        setTimeout(() => { 
+                                this.inboundEvents.off(InboundEvents.Command, HandleInboundCommand);
+                                reject('MP buffer receive timeout'); 
+                        }, MP_BUFFER_RECEIVE_TIMEOUT);
+                });
+        }
+ 
         /**
          * Send command, await for the responce, validate responce. Repeat several times 
          * before give up. 
@@ -174,52 +207,7 @@ export class Transciever
          */
         UDPSendCommandGetResponce(command, responce_validation_rule)
         {
-                const COMMAND_RESPONCE_TIMEOUT = 1000;
-                const SEND_REPEATS_BEFORE_GIVEUP = 3; 
-        
-                return new Promise((resolve, reject) => {
-
-                        let gotResponse = false;
-                        let socketClosed = false;
-        
-                        const MessageHandler = (msg, info) => 
-                        {
-                                LogReceivedMessage(msg, info);
-        
-                                if (responce_validation_rule(msg)) 
-                                {
-                                        this.socket.off('message', MessageHandler);
-                                        this.socket.off('close', CloseHandler);
-                                        gotResponse = true;
-                                        resolve(msg);
-                                }
-                        }
-
-                        const CloseHandler = () => {
-                                socketClosed = true;
-                        }
-        
-                        const SendCommandRetry = (repeatCounter) => 
-                        {
-                                if (repeatCounter) 
-                                {
-	                                if (!gotResponse && !socketClosed) 
-                                        {
-                                                this.UDPSendCommand(command);
-                                                setTimeout(() => SendCommandRetry(--repeatCounter), COMMAND_RESPONCE_TIMEOUT);
-                                        }
-                                }
-                                else
-                                {
-                                        this.socket.off('message', MessageHandler);
-                                        this.socket.off('close', CloseHandler);
-                                        reject('Responce timeout after: ' + command.serialize().toString("hex"));
-                                }                             
-                        }
-                        this.socket.on('close', CloseHandler);
-                        this.socket.on('message', MessageHandler);
-        
-                        SendCommandRetry(SEND_REPEATS_BEFORE_GIVEUP);
-                });
+                this.UDPSendCommand(command);
+                return this.UDPReceiveBuffer(responce_validation_rule);
         }
 }

@@ -23,6 +23,7 @@ export class Cmd28 extends Cmd24
         static get Head_NAT() { return 0x00010002; }
         static get Head_DVR() { return 0x00010001; }
         static get Tail() { return 0x0100fefe; }
+        static get CmdLen() { return 28; }
 
         serialize()
         {

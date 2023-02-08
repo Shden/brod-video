@@ -10,7 +10,7 @@ import { EventEmitter } from "node:events";
 
 const InboundEvents = {
         Command: 'command',
-        OutboundQueueDone: 'outbounddone'
+        OutboundQueueDone: 'outboundclear'
 }
 
 export class Transciever
@@ -42,22 +42,23 @@ export class Transciever
                 
                 return new Promise((resolve, reject) => {
                         this.socket.once('error', (err) => reject(err));
-                        this.socket.once('connect', () => resolve());
-                        this.socket.connect(port, host);
+                        this.socket.once('connect', () => resolve('connected'));
 
                         this.inboundCommands = new Map();
+                        this.unconfirmedCommands = new Map();
                         this.outboundCommands = new Map();
 
                         this.inboundEvents = new EventEmitter();
 
                         this.socket.on('message', (msg, rinfo) => {
-                                if (rinfo.address == this.host && rinfo.port == this.port)
+                                if (rinfo.address == this.host && rinfo.port == this.port && 
+                                        msg.readUInt32LE(4) == this.connectionID)
                                 {
                                         this.logger.LogReceivedMessage(msg, rinfo);
                                         switch(msg.readUInt32LE(0))
                                         {
-                                                case Cmd24.Head_DVR:
-                                                case Cmd24.Head_NAT:
+                                                case Cmd24.CmdID_DVR:
+                                                case Cmd24.CmdID_NAT:
                                                         // remove acknowledged command from outbound commands
                                                         const ack = Cmd24.deserialize(msg);
                                                         this.outboundCommands.delete(ack.Data2);
@@ -65,8 +66,8 @@ export class Transciever
                                                                 this.inboundEvents.emit(InboundEvents.OutboundQueueDone);
                                                         break;
 
-                                                case Cmd28.Head_DVR:
-                                                case Cmd28.Head_NAT:
+                                                case Cmd28.CmdID_DVR:
+                                                case Cmd28.CmdID_NAT:
                                                         const cmd28 = Cmd28.deserialize(msg);
                                                         this.inboundCommands.set(cmd28.Data1, cmd28);
                                                         this.inboundEvents.emit(InboundEvents.Command, cmd28);
@@ -75,8 +76,24 @@ export class Transciever
                                                 case DVRCmd.CmdID:
                                                         const dvrCmd = DVRCmd.deserialize(msg);
                                                         this.inboundCommands.set(dvrCmd.Data1, dvrCmd);
-                                                        this.inboundEvents.emit(InboundEvents.Command, dvrCmd);
-                                                        this.UDPAcknowledge(dvrCmd);
+                                                        
+
+                                                        // acknowledge by complete blocks and merge
+                                                        this.unconfirmedCommands.set(dvrCmd.Data1, dvrCmd);
+                                                        if (!dvrCmd.hasNextBlock)
+                                                        {
+                                                                // acknowledge
+                                                                this.unconfirmedCommands.forEach((cmd) => this.UDPAcknowledge(cmd));
+
+                                                                // merge
+                                                                let combinedBuffer = Buffer.allocUnsafe(0);
+                                                                this.unconfirmedCommands.forEach(cmd => combinedBuffer = Buffer.concat([combinedBuffer, cmd.payload]));
+
+                                                                dvrCmd.payload = combinedBuffer;
+                                                                this.inboundEvents.emit(InboundEvents.Command, dvrCmd);
+                                                                this.unconfirmedCommands.clear();
+                                                        }
+                                                        // this.UDPAcknowledge(dvrCmd);
                                                         break;
 
                                                 case NATCmd.CmdID:
@@ -88,6 +105,7 @@ export class Transciever
                                         }
                                 }
                         });
+                        this.socket.connect(port, host, () => resolve('connected2'));
                 });
         }
 
@@ -98,19 +116,29 @@ export class Transciever
         close()
         {
                 return new Promise((resolve, reject) => {
+                        const tearDown = () => {
+                                this.socket.removeAllListeners();
+                                this.inboundEvents.removeAllListeners();
+                                try {
+                                        this.socket.disconnect();
+                                        this.socket.close();
+                                } catch (error) { }
+                        }
+
                         if (this.outboundCommands.size)
                         {
                                 this.inboundEvents.once(InboundEvents.OutboundQueueDone, () => {
-                                        this.socket.disconnect();
-                                        this.socket.close();
+                                        tearDown();
                                         resolve();
                                 });
-                                setTimeout(() => reject('Transciever closing timeout'), 2000);
+                                setTimeout(() => {
+                                        tearDown();
+                                        reject('Transciever closing timeout');
+                                }, 1000);
                         } 
                         else
                         {
-                                this.socket.disconnect();
-                                this.socket.close();
+                                tearDown();
                                 resolve();
                         }
                 });
@@ -122,10 +150,10 @@ export class Transciever
          */
         UDPAcknowledge(cmd)
         {
-                this.lastReceivedCommandNumber = Math.max(this.lastReceivedCommandNumber, cmd.Data1);
-                const commandID = cmd.CmdHead === NATCmd.CmdID ? Cmd24.Head_NAT : Cmd24.Head_DVR;
+                this.lastReceivedCommandNumber = Math.max(this.lastReceivedCommandNumber, cmd.Data3);
+                const commandID = cmd.CmdHead === NATCmd.CmdID ? Cmd24.CmdID_NAT : Cmd24.CmdID_DVR;
                 const clientAck = new Cmd24(commandID, cmd.ConnectionID, 
-                        this.lastSentCommandNumber, this.lastReceivedCommandNumber, 0, this.lastReceivedCommandNumber + 1);
+                        this.lastSentCommandNumber, cmd.Data1, 0, cmd.Data1 + 1/*this.lastReceivedCommandNumber*/);
                 this.UDPSendCommand(clientAck);
         }
 
@@ -161,28 +189,21 @@ export class Transciever
         UDPReceiveBuffer(responce_validation_rule)
         {
                 const MP_BUFFER_RECEIVE_TIMEOUT = 2000;
+                let responceReceived = false;
 
                 return new Promise((resolve, reject) => {
 
-                        const linearizer = new UDPLinearizer();
+                        // const linearizer = new UDPLinearizer();
 
                         const HandleInboundCommand = (cmd) => {
-        
-                                if (responce_validation_rule(cmd)) 
+
+                                if (responce_validation_rule === undefined || responce_validation_rule(cmd)) 
                                 {
                                         this.inboundCommands.delete(cmd.Data1);
-                                        //cmd.decodeSegments();
-                                        //binPayload.printSegments();
 
-                                        // linearizer.push(cmd);
-                
-                                        // if (linearizer.isComplete) 
-                                        // {
-                                                this.inboundEvents.off(InboundEvents.Command, HandleInboundCommand);
-                                                const combinedBuffer = linearizer.combinedBuffer;
-                                                this.logger.log('%d bytes MP buffer reconstructed.', combinedBuffer.length)
-                                                resolve(cmd/*combinedBuffer*/);
-                                        // }
+                                        responceReceived = true;
+                                        this.inboundEvents.off(InboundEvents.Command, HandleInboundCommand);
+                                        resolve(cmd);        
                                 }
                         }
 
@@ -192,8 +213,10 @@ export class Transciever
                         this.inboundEvents.on(InboundEvents.Command, HandleInboundCommand);
 
                         setTimeout(() => { 
-                                this.inboundEvents.off(InboundEvents.Command, HandleInboundCommand);
-                                reject('MP buffer receive timeout'); 
+                                if (!responceReceived) {
+                                        this.inboundEvents.off(InboundEvents.Command, HandleInboundCommand);
+                                        reject('MP buffer receive timeout'); 
+                                }
                         }, MP_BUFFER_RECEIVE_TIMEOUT);
                 });
         }

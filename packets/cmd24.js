@@ -26,8 +26,8 @@ export class Cmd24
                 this.Data4 = data4;
         }
 
-        static get Head_DVR() { return 0x00010201; }
-        static get Head_NAT() { return 0x00010302; }
+        static get CmdID_DVR() { return 0x00010201; }
+        static get CmdID_NAT() { return 0x00010302; }
         static get CmdLen() { return 24; }
         
         serialize()

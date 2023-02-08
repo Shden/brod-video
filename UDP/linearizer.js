@@ -8,7 +8,7 @@ export class UDPLinearizer extends Array
                 this.sort((a, b) => a.Data1 - b.Data1);
 
                 const buffer = this.combinedBuffer;
-                const cmd = new DVRCmd(DVRCmd.Head_DVR, 0, 0, 0, 0, 0, buffer);
+                const cmd = new DVRCmd(DVRCmd.CmdID_DVR, 0, 0, 0, 0, 0, buffer);
                 cmd.decodeSegments();
 
                 return !cmd.hasNextBlock;

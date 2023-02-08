@@ -2,16 +2,16 @@
 import { Cmd28 } from './packets/cmd28.js';
 import { NATCmd } from './packets/natCmd.js';
 import { Cmd24 } from './packets/cmd24.js';
-import { DVRCmd, ChannelRequest, Cmd88, DVRAuth, QuerySystemCaps } from "./packets/dvrCmd.js";
+import { DVRCmd, ChannelRequest, Cmd88, DVRAuth, QuerySystemCaps, QueryOnlineChlList } from "./packets/dvrCmd.js";
 import { serialNumber } from './privateData.js';
 import { VideoFeedRequest } from "./packets/dvrCmd.js";
 import { QueryNodeEncodeInfo } from "./packets/dvrCmd.js";
 import xml2js from "xml2js";
-import { v4 as uuidv4 } from 'uuid';
 import { Transciever } from "./UDP/transciever.js";
 import { autoNATURI, autoNATPort } from "./privateData.js";
 import { XMLHttpRequest } from "xmlhttprequest";
 import { LogLevel } from './UDP/logger.js';
+import { UUID } from './uuid.js';
 
 const NAT_TIMEOUT = 2000;
 
@@ -65,10 +65,10 @@ function NATHandshake(transciever)
 {
         return new Promise((resolve, reject) => {
 
-                const handShake1 = new Cmd28(Cmd28.Head_NAT, 
+                const handShake1 = new Cmd28(Cmd28.CmdID_NAT, 
                         transciever.connectionID, 0, 0, transciever.connectionID, 0);
                 // see doc/conversations/DVR conversation 24122022.xlsm packet 1992 and 2319
-                const handShake2 = new Cmd28(Cmd28.Head_NAT, 
+                const handShake2 = new Cmd28(Cmd28.CmdID_NAT, 
                         transciever.connectionID, transciever.connectionID - 1, transciever.connectionID - 1, 
                         transciever.connectionID, transciever.connectionID + 1);
                 transciever.UDPSendCommandGetResponce(handShake1, (msg) => cmd28(msg))
@@ -92,7 +92,7 @@ function NAT10006Request(transciever)
         return new Promise((resolve, reject) => {
         
                 const NATRequest = new NATCmd(NAT10006XMLRequest);
-                transciever.UDPSendCommandGetResponce(NATRequest, (cmd) => cmd.CmdHead === NATCmd.CmdID )
+                transciever.UDPSendCommandGetResponce(NATRequest, (cmd) => cmd.CmdHead === NATCmd.CmdID)
                 .then((natResponce) => {
                         xml2js.parseString(natResponce.XML, (err, result) => {
                                 if (err) reject(err);
@@ -126,10 +126,8 @@ function NAT10002Request(transciever, DVRconnectionID)
                 // send NAT request. See doc/conversations/NAT conversation 24122022.xlsm packet ref 1993
                 const NATRequest = new NATCmd(NAT10002XMLRequest);
 
-                transciever.UDPSendCommandGetResponce(NATRequest, (msg) => headIs(msg, NATCmd.CmdID))
-                .then((msg) => {
-                        const natResponce = NATCmd.deserialize(msg);
-                        transciever.UDPAcknowledge(natResponce);
+                transciever.UDPSendCommandGetResponce(NATRequest, (cmd) => cmd.CmdHead === NATCmd.CmdID)
+                .then((natResponce) => {
                         xml2js.parseString(natResponce.XML, (err, result) => {
                                 if (err) reject(err);
 
@@ -188,17 +186,11 @@ export function NATRegisterConnection(NATHost, NATPort, connectionID)
         transciever.socket.bind(DVR_UDP_PORT);
 
         return new Promise((resolve, reject) => {
-                console.group('NATRegisterConnection');
                 transciever.connect(NATHost, NATPort)
                 .then(() => NATHandshake(transciever))
                 .then(() => NAT10002Request(transciever, connectionID))
-                .then((res) => resolve(res))
-                .catch((reason) => reject(reason) )
-                .finally(() => {
-                        // ack(transciever, Cmd24.Head_NAT);
-                        transciever.close();
-                        console.groupEnd();
-                })
+                .then((result) => transciever.close().then(() => resolve(result)))
+                .catch((reason) => transciever.close().then(() => reject(reason)))
         });
 }
 
@@ -209,93 +201,108 @@ export function DVRConnect(DVRHost, DVRPort, connectionID)
         // Should be the same port number in NATRegisterConnection and DVRConnect
         transciever.socket.bind(DVR_UDP_PORT);
 
-
-        // // -- chunk 4 => try to request video feed
-        // const videoFeedConvID = transciever.connectionID + 16;
-        // let videoFeedRequestSeq = transciever.connectionID + 1;
-        // const videoFeedResponseConvID = transciever.connectionID + 32;
-        // /* 2868 */ 
-        // const willRequest_4_1 = new Cmd24(Cmd24.Head_DVR, transciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, 0, videoFeedConvID);
-        // /* 2873 */
-        // const videoFeedRequest_4_2 = new VideoFeedRequest(
-        //         transciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID, videoFeedConvID,
-        //         taskId, destId);
-        // /* 2874 */
-        // const qnei_4_3 = new QueryNodeEncodeInfo(transciever.connectionID, ++videoFeedRequestSeq, videoFeedConvID, videoFeedResponseConvID + 1, videoFeedConvID);
+        const taskId = new UUID();
+        const destId = '00000002-0000-0000-0000-000000000000';
+        const channelNo = 2;
+        var videoSessionID;
 
         return new Promise((resolve, reject) => {
                 transciever.logger.group('DVR conversation');
 
                 // --> 1. DVR handshake see doc/conversations/DVR conversation 24122022.xlsm 2453-2508
                 new Promise((resolve, reject) => {
-                        transciever.logger.log  ('From -> to                          CmdID   |ConnID  |D1 |D2 |D3 |D4 |');
-                        transciever.logger.log  ('-------------------------------------------------------------------------------------');
                         transciever.logger.group('Handshake');
 
-                        const cmd28_1 = new Cmd28(Cmd28.Head_DVR, 
+                        const cmd28_1 = new Cmd28(Cmd28.CmdID_DVR, 
                                 transciever.connectionID, 0, 0, transciever.connectionID, 0);
-                        const cmd28_2 = new Cmd28(Cmd28.Head_DVR, 
+                        const cmd28_2 = new Cmd28(Cmd28.CmdID_DVR, 
                                 transciever.connectionID, transciever.connectionID - 1, 0, transciever.connectionID, 
                                 transciever.connectionID);
-                        const cmd28_3 = new Cmd28(Cmd28.Head_DVR, 
+                        const cmd28_3 = new Cmd28(Cmd28.CmdID_DVR, 
                                 transciever.connectionID, transciever.connectionID - 1, transciever.connectionID - 1, 
                                 transciever.connectionID, transciever.connectionID + 1);
-
+ 
                         transciever.connect(DVRHost, DVRPort)
-                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_1, (msg) => cmd28(msg)))
-                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_2, (msg) => cmd28(msg)))
-                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_3, (msg) => cmd28(msg)))
+                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_1, cmd => cmd.CmdHead === Cmd28.CmdID_DVR))
+                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_2, cmd => cmd.CmdHead === Cmd28.CmdID_DVR))
+                        .then(() => transciever.UDPSendCommandGetResponce(cmd28_3, cmd => cmd.CmdHead === DVRCmd.CmdID))
                         // -- Receive Cmd88
-                        .then(() => transciever.UDPReceiveSPBuffer())
+                        //.then(() => transciever.UDPReceiveBuffer(cmd => cmd.CmdHead === DVRCmd.CmdID))
+                        .then(() => transciever.logger.groupEnd())
                         .then(() => resolve())
-                        .finally(() => transciever.logger.groupEnd())
                 })
 
                 // --> 2. DRAuth
                 .then(() => { return new Promise((resolve, reject) => {
                         transciever.logger.group('DRAuth');
                         const authRequest = new DVRAuth();
-                        transciever.UDPSendCommandGetResponce(authRequest, msg => cmd24(msg))
-                        .then(() => transciever.UDPReceiveMPBuffer() )
+                        transciever.UDPSendCommandGetResponce(authRequest, cmd => cmd.Data2 === authRequest.Data1)
+                        .then(authResp => {
+                                //authResp.printSegments();
+                                videoSessionID = UUID.from(authResp.getSegments(0x0101, 108, 16)[0]);
+                                console.log('videoSessionID:', videoSessionID);
+                        })
+                        .then(() => transciever.logger.groupEnd())
                         .then(() => resolve())
-                        .finally(() => transciever.logger.groupEnd())
+                        // .then(() => setTimeout(() => resolve(), 7000)) // Tmp
                 })})
 
-                // // --> 3. QuerySystemCaps
+                // --> 3. QuerySystemCaps
+                .then(() => { return new Promise((resolve, reject) => {
+                        transciever.logger.group('QuerySystemCaps');
+                        const querySystemCaps = new QuerySystemCaps();
+                        transciever.UDPSendCommandGetResponce(querySystemCaps, cmd => cmd.CmdHead === DVRCmd.CmdID)
+                        .then(() => transciever.logger.groupEnd())
+                        .then(() => resolve())
+                })})
+
+                // --> 4. ChannelRequest
+                .then(() => { return new Promise((resolve, reject) => {
+                        transciever.logger.group('ChannelRequest');
+                        const channelRequest = new ChannelRequest(channelNo, taskId, destId, videoSessionID);
+                        const QOCL = new QueryOnlineChlList();
+                        // const videoFeedRequest = new VideoFeedRequest(taskId, destId); /* 2873 */
+                        const qnei = new QueryNodeEncodeInfo(); /* 2874 */
+
+
+                        transciever.UDPSendCommand(channelRequest);
+                        transciever.UDPSendCommand(QOCL);
+                        const p32 = new DVRCmd(DVRCmd.CmdID,0,0,0,0,0,Buffer.from('3131313100000000', 'hex'));
+                        transciever.UDPSendCommand(p32);
+                        // transciever.UDPSendCommand(qnei);
+
+                        // setTimeout(() => {
+                        //         transciever.UDPSendCommand(videoFeedRequest);
+                        //         // transciever.UDPSendCommand(qo);
+                        // }, 5000);
+                        setTimeout(() => resolve(), 10000);
+                        //.then(() => transciever.logger.groupEnd())
+
+                        // return UDPSendCommandGetResponce(channelRequest, (msg) => headIs(msg, 0x00010201))
+                })})
                 // .then(() => { return new Promise((resolve, reject) => {
-                //         console.group('QuerySystemCaps');
-                //         const querySystemCaps = new QuerySystemCaps();
-                //         transciever.UDPSendCommandGetResponce(querySystemCaps, msg => cmd24(msg))
-                //         .then(() => transciever.UDPReceiveMPBuffer() )
-                //         .then(() => resolve())
-                //         .finally(() => console.groupEnd())
+                //         transciever.logger.group('VideoFeedRequest');
+                //         
+                //         .then(() => setTimeout(() => resolve(), 5000)) // Tmp
+                //         .then(() => transciever.logger.groupEnd())
+                //         // return UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, qnei, (msg) => seqAbove(msg, connID + 32));
                 // })})
 
-                // // --> step 3, ChannelRequest
-                // .then(() => {
-                //         const taskId = uuidv4();
-                //         const destId = '00000001-0000-0000-0000-000000000000';
-                //         const channelNo = 0;
-                //         const channelRequest = new ChannelRequest(channelNo, taskId, destId);
-
-                //         transciever.UDPSendCommand(channelRequest);
-
-                //         // return UDPSendCommandGetResponce(channelRequest, (msg) => headIs(msg, 0x00010201))
-                // })
-                // // --> step 4, try to request video feed
-                // .then(() => {
-                //         UDPSendCommand(DVRSocket, DVRHost, DVRPort, willRequest_4_1);
-                //         UDPSendCommand(DVRSocket, DVRHost, DVRPort, videoFeedRequest_4_2);
-                //         return UDPSendCommandGetResponce(DVRSocket, DVRHost, DVRPort, qnei_4_3, (msg) => seqAbove(msg, connID + 32));
-                // })
-
-                .then(() => resolve() )
-                .finally(() => transciever.close() )
+                .then(() => resolve())
+                .catch((err) => console.log(err))
+                .finally(() => transciever.close())
         });
 }
 
 const headIs = (msg, x) => msg.readUint32LE(0) == x;
 //const cmd28 = (msg) => headIs(msg, Cmd28.Head_DVR) || headIs(msg, Cmd28.Head_NAT);
 const cmd28 = (cmd) => cmd.constructor.name === "Cmd28"
-const cmd24 = (msg) => headIs(msg, Cmd24.Head_DVR) || headIs(msg, Cmd24.Head_NAT);
+const cmd24 = (msg) => headIs(msg, Cmd24.CmdID_DVR) || headIs(msg, Cmd24.CmdID_NAT);
 // const seqAbove = (msg, seq) => msg.readUint32LE(8) > seq;
+
+
+//---
+// 30 <?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='SYS'><destId>{00000002-0000-0000-0000-000000000000}</destId><taskId>{EC33A4E8-EBD0-2240-908C-62DD02762ED8}</taskId><chNo>0</chNo><audio>0</audio><streamType>2</streamType></request>
+// 31 <?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='MOBILE' url='queryOnlineChlList'></request>
+// 37 <?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='SYS'><destId>{00000002-0000-0000-0000-000000000000}</destId><taskId>{EC33A4E8-EBD0-2240-908C-62DD02762ED8}</taskId><chNo>0</chNo><audio>0</audio><streamType>2</streamType></request>
+// 38 <?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='MOBILE' url='queryOnlineChlList'></request>

@@ -1,6 +1,7 @@
 // Unstructured binary payloads
 import { Cmd24 } from "./cmd24.js";
 import { DvrUserName, DvrUserPass } from "../privateData.js";
+import { UUID } from "../uuid.js";
 
 export class DVRCmd extends Cmd24 {
 
@@ -20,11 +21,9 @@ export class DVRCmd extends Cmd24 {
 
         static deserialize(buffer)
         {
-                const CMD24_LEN = 24;
-
                 const cmd24 = Cmd24.deserialize(buffer);
-                const payload = Buffer.allocUnsafe(buffer.length - CMD24_LEN);
-                buffer.copy(payload, 0, CMD24_LEN, buffer.length);
+                const payload = Buffer.allocUnsafe(buffer.length - Cmd24.CmdLen);
+                buffer.copy(payload, 0, Cmd24.CmdLen, buffer.length);
         
                 return new DVRCmd(cmd24.CmdHead, cmd24.ConnectionID, cmd24.Data1, cmd24.Data2,
                         cmd24.Data3, cmd24.Data4, payload);
@@ -32,9 +31,10 @@ export class DVRCmd extends Cmd24 {
 
         printSegments()
         {
-                console.log(' Header  Segment length ?????? ??');
+                console.log(' Header  Segment length ?????? ?? Type');
                 console.log('------------------------------------------------------------------------------------------------------------------------------------------');
 
+                this.decodeSegments();
                 this.segments.forEach(segment => { 
                         let segData = this.payload.subarray(segment.start, segment.end)
                         console.log(//"%i %d %d\t%s",
@@ -45,7 +45,8 @@ export class DVRCmd extends Cmd24 {
                                 segData.toString('hex', 4, 8), ('(' + segData.readUInt32LE(4).toString() + ')').padStart(5),
                                 segData.toString('hex', 8, 11),
                                 segData.toString('hex', 11, 12),
-                                segData.toString('hex', 12)
+                                segData.toString('hex', 12, 14),
+                                segData.toString('hex', 14)
                         ) 
                 });
                 console.log('hasNextBlock:', this.hasNextBlock);
@@ -53,14 +54,18 @@ export class DVRCmd extends Cmd24 {
 
         get hasNextBlock()
         {
+                this.decodeSegments();
                 if (this.segments.length)
                 {
                         let lastSeg = this.segments[this.segments.length-1];
                         if (lastSeg.end > this.payload.length) 
                                 return true;
-                        let lastSegData = this.payload.subarray(lastSeg.start, lastSeg.end);
-                        let markerByte = lastSegData.readUInt8(11);
-                        return markerByte == 1;
+                        // if (lastSeg.end - lastSeg.start < 11)
+                        //         return false;
+                        // let lastSegData = this.payload.subarray(lastSeg.start, lastSeg.end);
+                        // let markerByte = lastSegData.readUInt8(11);
+                        // return markerByte == 1;
+                        return false;
                 }
                 return false;
         }
@@ -80,6 +85,22 @@ export class DVRCmd extends Cmd24 {
                         this.segments.push({ start: offset, end: offset + segLength + 8});
                         offset += segLength + 8;
                 }
+        }
+
+        getSegments(type, dataOffset, dataLength)
+        {
+                const segments = new Array();
+                this.decodeSegments();
+                this.segments.forEach(segment => { 
+                        let segData = this.payload.subarray(segment.start, segment.end);
+                        let segType = segData.readUInt16LE(12);
+                        if (segType === type)
+                                if (dataOffset === undefined || dataLength === undefined)
+                                        segments.push(segData);
+                                else
+                                        segments.push(segData.subarray(dataOffset, dataOffset + dataLength))
+                });
+                return segments;
         }
         
 }
@@ -248,20 +269,40 @@ export class QuerySystemCaps extends DVRCmd
 // </request>
 export class ChannelRequest extends DVRCmd
 {
-        constructor(chNo, taskId, destID)
+        /**
+         * Create an instance of ChannelRequest.
+         * @param {Number} chNo channel number
+         * @param {UUID} taskId 
+         * @param {*} destID 
+         * @param {UUID} videoSessionID video session id from DVRAuth responce
+         */
+        constructor(chNo, taskId, destID, videoSessionID)
         {
                 super(ChannelRequest.CmdID, 0, 0, 0, 0, 0, ChannelRequest.Tail);
 
-                // binary part between cmd24 and xml
+                // binary part between cmd24 and xml, videoSessionID starts at position 40
                 const rawBin = '313131316d01000003000201050500000200000015010000facef55bd2eb4702bddd5ad5dc37e94a7d5d64aa742e4f53b7643e69908f57db0200000000000000000000000000000002000000d8cd876198b2477285273992f7a2c5df01000000';
-                // xml template 
-                const xml = `<?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='SYS'><destId>{${destID}}</destId><taskId>{${taskId}}</taskId><chNo>${chNo}</chNo><audio>0</audio><streamType>2</streamType></request>`;
+                
+                let binBuff = Buffer.from(rawBin, 'hex');
 
-                this.payload = Buffer.concat([Buffer.from(rawBin, "hex"), Buffer.from(xml)]);
+                // console.log('binBuff', binBuff.toString('hex'));
+                // console.log('videoSessionID', videoSessionID.toString('hex'));
+                // copy videoSessionID
+                if (videoSessionID !== undefined)
+                        videoSessionID.data.copy(binBuff, 40, 0);
+                // console.log('binBuff', binBuff.toString('hex'));
+
+                // task ID
+                taskId.data.copy(binBuff, 76, 0);
+
+                // xml template 
+                const xml = `<?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='SYS'><destId>{${destID.toString()}}</destId><taskId>{${taskId.toString()}}</taskId><chNo>${chNo}</chNo><audio>0</audio><streamType>2</streamType></request>`;
+
+                this.payload = Buffer.concat([binBuff, Buffer.from(xml)]);
         }
 }
 
-// 2674
+// 2674 (next ChannelRequest)
 // <?xml version='1.0' encoding='utf-8'?>
 // <request version='1.0' systemType='NVMS-9000' clientType='SYS'>
 //         <destId>{00000005-0000-0000-0000-000000000000}</destId>
@@ -272,11 +313,24 @@ export class ChannelRequest extends DVRCmd
 // </request>
 
 
-// 2675
+// 2675 (315 bytes total)
 // queryOnlineChlList
 // <?xml version='1.0' encoding='utf-8'?>
 // <request version='1.0' systemType='NVMS-9000' clientType='MOBILE' url='queryOnlineChlList'></request>
+export class QueryOnlineChlList extends DVRCmd
+{
+        constructor()
+        {
+                super(QueryOnlineChlList.CmdID, 0, 0, 0, 0, 0, QueryOnlineChlList.Tail);
 
+                // binary part between cmd24 and xml
+                const rawBin = '313131311b010000030000011b090000030000000b01000061646d696e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000071756572794f6e6c696e6543686c4c69737400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+                // xml template 
+                const xml = `<?xml version='1.0' encoding='utf-8'?><request version='1.0' systemType='NVMS-9000' clientType='MOBILE' url='queryOnlineChlList'></request>`;
+
+                this.payload = Buffer.concat([Buffer.from(rawBin, "hex"), Buffer.from(xml)]);
+        }
+}
 
 // 2863
 // 0000   45 e0 05 14 00 00 40 00 32 11 6e df 2d 89 71 45   E.....@.2.n.-.qE
@@ -530,9 +584,9 @@ export class ChannelRequest extends DVRCmd
 // </request>
 export class VideoFeedRequest extends DVRCmd
 {
-        constructor(connID, seq, convID, respConvID, data4, taskId, destID)
+        constructor(taskId, destID)
         {
-                super(VideoFeedRequest.CmdID, connID, seq, convID, respConvID, data4);
+                super(VideoFeedRequest.CmdID, 0, 0, 0, 0, 0);
 
                 // binary part between cmd28 and xml
                 const rawBin = '31313131cc01000003000101060500000f00000088010000ee8220c41dc945568ee9bd3f657ef9927d5d64aa742e4f53b7643e69908f57db0500000000000000000000000000000002000000';
@@ -611,9 +665,9 @@ export class QueryNodeEncodeInfo extends DVRCmd
         static get Raw() { return `1e020000030000011b090000100000000e020000${DvrUserName}000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000071756572794e6f6465456e636f6465496e666f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003c3f786d6c2076657273696f6e3d27312e302720656e636f64696e673d277574662d38273f3e3c726571756573742076657273696f6e3d27312e30272073797374656d547970653d274e564d532d393030302720636c69656e74547970653d274d4f42494c45272075726c3d2771756572794e6f6465456e636f6465496e666f273e3c636f6e646974696f6e3e3c63686c49643e7b30303030303030332d303030302d303030302d303030302d3030303030303030303030307d3c2f63686c49643e3c2f636f6e646974696f6e3e3c726571756972654669656c643e3c6d61696e436170732f3e3c737562436170732f3e3c7375622f3e3c6d6e2f3e3c6d652f3e3c616e2f3e3c61652f3e3c7265632f3e3c6674705265632f3e3c6d61696e53747265616d5175616c6974794e6f74652f3e3c73756253747265616d5175616c6974794e6f74652f3e3c7072655265636f726454696d654e6f74652f3e3c64656c617965645265636f726454696d654e6f74652f3e3c2f726571756972654669656c643e3c2f726571756573743e`; }
         static get Tail() { return 0x31313131; }
 
-        constructor(connID, seq, convID, data3, data4)
+        constructor()
         {
-                super(QueryNodeEncodeInfo.CmdID, connID, seq, convID, data3, data4, QueryNodeEncodeInfo.Tail);
+                super(QueryNodeEncodeInfo.CmdID, 0, 0, 0, 0, 0, QueryNodeEncodeInfo.Tail);
                 this.payload = Buffer.from(QueryNodeEncodeInfo.Raw, "hex");
         }
 

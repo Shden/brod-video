@@ -4,6 +4,11 @@ export const LogLevel =
         All: 20
 }
 
+const MessageDirection = {
+        Received: 1,
+        Sent: 2
+}
+
 export class Logger
 {
         constructor(logLevel = LogLevel.None)
@@ -18,8 +23,9 @@ export class Logger
         {
                 if (this.LogLevel > LogLevel.None) 
                 {
-                	console.log('%d bytes --> %s:%d || %s', 
-	                        buffer.length, host.padStart(16), port, this.FormatBufferForLog(buffer));
+                	console.log(
+                                this.FormatHeaderForLog(MessageDirection.Sent, host, port, buffer.length),
+	                        this.FormatBufferForLog(buffer));
                 }
         }
 
@@ -27,8 +33,24 @@ export class Logger
         {
                 if (this.LogLevel > LogLevel.None) 
                 {
-                        console.log('%s:%d --> %d bytes || %s',
-                                info.address.padStart(16), info.port, buffer.length, this.FormatBufferForLog(buffer));
+                        console.log(
+                                this.FormatHeaderForLog(MessageDirection.Received, info.address, info.port, buffer.length),
+                                this.FormatBufferForLog(buffer));
+                }
+        }
+
+        FormatHeaderForLog(direction, host, port, len)
+        {
+                const addr = `${host}:${port}`;
+                const size = `${len} bytes`;
+                const pad = '>'.padStart(32-addr.length-size.length, '-');
+
+                switch (direction)
+                {
+                        case MessageDirection.Sent:
+                                return size + ' ' + pad + ' ' + addr;
+                        case MessageDirection.Received:
+                                return addr + ' ' + pad + ' ' + size;
                 }
         }
 
